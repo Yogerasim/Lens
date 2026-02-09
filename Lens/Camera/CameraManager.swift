@@ -39,8 +39,8 @@ final class CameraManager: NSObject, ObservableObject {
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     private let outputQueue = DispatchQueue(label: "camera.output.queue")
     private let audioOutputQueue = DispatchQueue(label: "camera.audio.queue")
-    private let videoOutput = AVCaptureVideoDataOutput()
-    private let audioOutput = AVCaptureAudioDataOutput()
+    nonisolated(unsafe) private let videoOutput = AVCaptureVideoDataOutput()
+    nonisolated(unsafe) private let audioOutput = AVCaptureAudioDataOutput()
     private var currentInput: AVCaptureDeviceInput?
     private var audioInput: AVCaptureDeviceInput?
     
@@ -131,15 +131,15 @@ final class CameraManager: NSObject, ObservableObject {
             // Orientation / rotation for portrait
             if let connection = self.videoOutput.connection(with: .video) {
                 if #available(iOS 17.0, *) {
-                    connection.videoRotationAngle = 90
+                    connection.videoRotationAngle = 0 // не вращаем буфер, поворот в шейдере
                 } else {
                     if connection.isVideoOrientationSupported {
-                        connection.videoOrientation = .portrait
+                        connection.videoOrientation = .portrait // влияет на метаданные, не на буфер
                     }
                 }
-                // Mirror for front preview if needed (we handle mirroring in renderer via uniforms, so keep disabled here)
+                // Mirror выключен — зеркалим в шейдере
                 if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = (self.currentPosition == .front)
+                    connection.isVideoMirrored = false
                 }
             }
             
@@ -240,7 +240,7 @@ final class CameraManager: NSObject, ObservableObject {
             // Orientation
             if let connection = self.videoOutput.connection(with: .video) {
                 if #available(iOS 17.0, *) {
-                    connection.videoRotationAngle = 90
+                    connection.videoRotationAngle = 0 // не вращаем буфер, поворот в шейдере
                 } else {
                     connection.videoOrientation = .portrait
                 }
@@ -270,7 +270,7 @@ final class CameraManager: NSObject, ObservableObject {
 }
 
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate & AVCaptureAudioDataOutputSampleBufferDelegate
-extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
+nonisolated extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,

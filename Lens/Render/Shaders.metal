@@ -21,58 +21,52 @@ vertex VertexOut vertex_main(
     uint vid [[vertex_id]],
     constant Uniforms &uniforms [[buffer(0)]]
 ) {
-    // Full-screen quad positions
-    float2 pos[4] = {
+    // Базовый fullscreen quad (-1..1)
+    float2 basePos[4] = {
         {-1, -1}, {1, -1},
         {-1,  1}, {1,  1}
     };
 
-    // Base UV coordinates (0,0 top-left, 1,1 bottom-right)
+    // Базовые UV (0..1)
     float2 baseUV[4] = {
         {0, 0}, {1, 0},
         {0, 1}, {1, 1}
     };
 
+    // 1) Поворот + зеркалирование UV вокруг центра
     float2 uv = baseUV[vid];
-    
-    // 1. Применяем поворот (rotation)
+    float2 centeredUV = uv - 0.5;
     float cosR = cos(uniforms.rotation);
     float sinR = sin(uniforms.rotation);
-    
-    // Центрируем UV для поворота
-    float2 centeredUV = uv - 0.5;
-    
-    // Поворот вокруг центра
-    float2 rotatedUV;
-    rotatedUV.x = centeredUV.x * cosR - centeredUV.y * sinR;
-    rotatedUV.y = centeredUV.x * sinR + centeredUV.y * cosR;
-    
-    // Возвращаем к 0-1 координатам
-    rotatedUV += 0.5;
-    
-    // 2. Применяем зеркалирование для фронтальной камеры
-    if (uniforms.mirror > 0.5) {
-        rotatedUV.x = 1.0 - rotatedUV.x;
+    float2 rotUV;
+    rotUV.x = centeredUV.x * cosR - centeredUV.y * sinR;
+    rotUV.y = centeredUV.x * sinR + centeredUV.y * cosR;
+    rotUV += 0.5;
+    if (uniforms.mirror > 0.5) { rotUV.x = 1.0 - rotUV.x; }
+
+    // 2) Aspect-fill через масштаб геометрии (позиции), НЕ UV
+    // Эффективное соотношение сторон текстуры с учётом поворота: если повёрнута на 90°/270°, меняем местами
+    float effectiveTextureAspect = uniforms.textureAspect;
+    float rotMod = fmod(uniforms.rotation, 3.14159265f); // π
+    if (abs(rotMod - 1.57079633f) < 0.0001f) { // ~π/2
+        effectiveTextureAspect = 1.0 / effectiveTextureAspect;
     }
-    
-    // 3. Aspect-fill: масштабируем UV чтобы заполнить view без растяжения
-    float2 finalUV = rotatedUV - 0.5; // центрируем
-    
-    if (uniforms.textureAspect > uniforms.viewAspect) {
-        // Текстура шире view - масштабируем по X
-        float scale = uniforms.textureAspect / uniforms.viewAspect;
-        finalUV.x *= scale;
+
+    float viewAspect = uniforms.viewAspect;
+    float2 scale = float2(1.0, 1.0);
+    if (effectiveTextureAspect > viewAspect) {
+        // Текстура шире в сравнении с view — уменьшаем X позиции
+        scale.x = viewAspect / effectiveTextureAspect;
     } else {
-        // Текстура выше view - масштабируем по Y
-        float scale = uniforms.viewAspect / uniforms.textureAspect;
-        finalUV.y *= scale;
+        // Текстура выше — уменьшаем Y позиции
+        scale.y = effectiveTextureAspect / viewAspect;
     }
-    
-    finalUV += 0.5; // возвращаем к 0-1
+
+    float2 pos = basePos[vid] * scale;
 
     VertexOut out;
-    out.position = float4(pos[vid], 0, 1);
-    out.uv = finalUV;
+    out.position = float4(pos, 0, 1);
+    out.uv = rotUV;
     return out;
 }
 
