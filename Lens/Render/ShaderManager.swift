@@ -34,6 +34,8 @@ struct ShaderUniforms {
     var time: Float
     var viewAspect: Float
     var textureAspect: Float
+    var rotation: Float      // поворот в радианах (0, π/2, π, 3π/2)
+    var mirror: Float        // зеркалирование (0.0 или 1.0)
 }
 
 // MARK: - Shader Manager

@@ -6,6 +6,8 @@ struct Uniforms {
     float time;
     float viewAspect;
     float textureAspect;
+    float rotation;    // поворот в радианах
+    float mirror;      // зеркалирование (0.0 или 1.0)
 };
 
 // MARK: - Vertex Output
@@ -19,28 +21,54 @@ vertex VertexOut vertex_main(
     uint vid [[vertex_id]],
     constant Uniforms &uniforms [[buffer(0)]]
 ) {
-    // Full-screen quad
+    // Full-screen quad positions
     float2 pos[4] = {
         {-1, -1}, {1, -1},
         {-1,  1}, {1,  1}
     };
 
-    float2 uv[4] = {
+    // Base UV coordinates (0,0 top-left, 1,1 bottom-right)
+    float2 baseUV[4] = {
         {0, 0}, {1, 0},
         {0, 1}, {1, 1}
     };
 
-    // Aspect-fill: scale UVs to fill view without stretching
-    float2 baseUV = uv[vid];
-    float2 centered = baseUV - 0.5;
-    if (uniforms.textureAspect > uniforms.viewAspect) {
-        float scale = uniforms.textureAspect / uniforms.viewAspect;
-        centered.x *= scale;
-    } else {
-        float scale = uniforms.viewAspect / uniforms.textureAspect;
-        centered.y *= scale;
+    float2 uv = baseUV[vid];
+    
+    // 1. Применяем поворот (rotation)
+    float cosR = cos(uniforms.rotation);
+    float sinR = sin(uniforms.rotation);
+    
+    // Центрируем UV для поворота
+    float2 centeredUV = uv - 0.5;
+    
+    // Поворот вокруг центра
+    float2 rotatedUV;
+    rotatedUV.x = centeredUV.x * cosR - centeredUV.y * sinR;
+    rotatedUV.y = centeredUV.x * sinR + centeredUV.y * cosR;
+    
+    // Возвращаем к 0-1 координатам
+    rotatedUV += 0.5;
+    
+    // 2. Применяем зеркалирование для фронтальной камеры
+    if (uniforms.mirror > 0.5) {
+        rotatedUV.x = 1.0 - rotatedUV.x;
     }
-    float2 finalUV = centered + 0.5;
+    
+    // 3. Aspect-fill: масштабируем UV чтобы заполнить view без растяжения
+    float2 finalUV = rotatedUV - 0.5; // центрируем
+    
+    if (uniforms.textureAspect > uniforms.viewAspect) {
+        // Текстура шире view - масштабируем по X
+        float scale = uniforms.textureAspect / uniforms.viewAspect;
+        finalUV.x *= scale;
+    } else {
+        // Текстура выше view - масштабируем по Y
+        float scale = uniforms.viewAspect / uniforms.textureAspect;
+        finalUV.y *= scale;
+    }
+    
+    finalUV += 0.5; // возвращаем к 0-1
 
     VertexOut out;
     out.position = float4(pos[vid], 0, 1);

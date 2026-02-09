@@ -16,6 +16,25 @@ final class CameraManager: NSObject, ObservableObject {
     /// Текущая позиция камеры
     @Published var currentPosition: AVCaptureDevice.Position = .back
     
+    /// Информация для правильной ориентации
+    var isFrontCamera: Bool {
+        return currentPosition == .front
+    }
+    
+    /// Поворот для портретного режима (90 градусов в радианах)
+    var rotation: Float {
+        return Float.pi / 2.0  // 90 градусов для портрета
+    }
+    
+    /// Текущий зум фактор
+    @Published var currentZoomFactor: CGFloat = 1.0
+    
+    /// Минимальный зум (динамически обновляется от устройства)
+    private var minZoomFactor: CGFloat = 1.0
+    
+    /// Максимальный зум (динамически обновляется от устройства)
+    private var maxZoomFactor: CGFloat = 10.0
+    
     // MARK: - Private
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     private let outputQueue = DispatchQueue(label: "camera.output.queue")
@@ -25,10 +44,112 @@ final class CameraManager: NSObject, ObservableObject {
     private var currentInput: AVCaptureDeviceInput?
     private var audioInput: AVCaptureDeviceInput?
     
+    // Текущий тип камеры (для back)
+    private var currentBackDeviceType: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
+    
     // MARK: - Init
     override init() {
         super.init()
         configureSession()
+    }
+    
+    // MARK: - Session Configuration
+    private func configureSession() {
+        sessionQueue.async {
+            self.session.beginConfiguration()
+            
+            // Preset
+            if self.session.canSetSessionPreset(.high) {
+                self.session.sessionPreset = .high
+            }
+            
+            // Video device selection based on current position
+            let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
+            let discovery = AVCaptureDevice.DiscoverySession(
+                deviceTypes: desiredTypes,
+                mediaType: .video,
+                position: self.currentPosition
+            )
+            // Prefer wide for initial
+            let device = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first
+            
+            // Remove old inputs if any
+            if let existing = self.currentInput {
+                self.session.removeInput(existing)
+                self.currentInput = nil
+            }
+            
+            if let videoDevice = device {
+                do {
+                    let input = try AVCaptureDeviceInput(device: videoDevice)
+                    if self.session.canAddInput(input) {
+                        self.session.addInput(input)
+                        self.currentInput = input
+                        if self.currentPosition == .back {
+                            self.currentBackDeviceType = videoDevice.deviceType
+                        }
+                    }
+                } catch {
+                    print("❌ Failed to create video input: \(error)")
+                }
+            } else {
+                print("❌ No video device found")
+            }
+            
+            // Audio input (try add; if permission denied later, session will still run)
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
+                if let mic = AVCaptureDevice.default(for: .audio) {
+                    do {
+                        let inAudio = try AVCaptureDeviceInput(device: mic)
+                        if self.session.canAddInput(inAudio) {
+                            self.session.addInput(inAudio)
+                            self.audioInput = inAudio
+                        }
+                    } catch {
+                        print("⚠️ Failed to create audio input: \(error)")
+                    }
+                }
+            }
+            
+            // Video output settings
+            self.videoOutput.alwaysDiscardsLateVideoFrames = true
+            // BGRA is convenient for CI/Metal path you use
+            self.videoOutput.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+            self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
+            if self.session.canAddOutput(self.videoOutput) {
+                self.session.addOutput(self.videoOutput)
+            }
+            
+            // Audio output
+            self.audioOutput.setSampleBufferDelegate(self, queue: self.audioOutputQueue)
+            if self.session.canAddOutput(self.audioOutput) {
+                self.session.addOutput(self.audioOutput)
+            }
+            
+            // Orientation / rotation for portrait
+            if let connection = self.videoOutput.connection(with: .video) {
+                if #available(iOS 17.0, *) {
+                    connection.videoRotationAngle = 90
+                } else {
+                    if connection.isVideoOrientationSupported {
+                        connection.videoOrientation = .portrait
+                    }
+                }
+                // Mirror for front preview if needed (we handle mirroring in renderer via uniforms, so keep disabled here)
+                if connection.isVideoMirroringSupported {
+                    connection.isVideoMirrored = false
+                }
+            }
+            
+            // Update zoom limits
+            if let device = self.currentInput?.device {
+                self.updateZoomLimits(for: device)
+            }
+            
+            self.session.commitConfiguration()
+        }
     }
     
     // MARK: - Start/Stop
@@ -70,6 +191,9 @@ final class CameraManager: NSObject, ObservableObject {
         sessionQueue.async {
             if !self.session.isRunning {
                 self.session.startRunning()
+                if let device = self.currentInput?.device {
+                    self.updateZoomLimits(for: device)
+                }
                 print("✅ Camera session started")
             }
         }
@@ -87,140 +211,61 @@ final class CameraManager: NSObject, ObservableObject {
     func switchCamera() {
         sessionQueue.async {
             let newPosition: AVCaptureDevice.Position = self.currentPosition == .back ? .front : .back
-            
-            guard let newDevice = AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: newPosition
-            ) else {
-                print("❌ Camera for position \(newPosition) not available")
-                return
-            }
-            
-            do {
-                let newInput = try AVCaptureDeviceInput(device: newDevice)
-                
-                self.session.beginConfiguration()
-                
-                // Удаляем старый input
-                if let currentInput = self.currentInput {
-                    self.session.removeInput(currentInput)
-                }
-                
-                // Выбираем оптимальный preset для камеры
-                let preferredPreset: AVCaptureSession.Preset = newPosition == .front ? .hd1280x720 : .hd1920x1080
-                if self.session.canSetSessionPreset(preferredPreset) {
-                    self.session.sessionPreset = preferredPreset
-                } else {
-                    self.session.sessionPreset = .high
-                }
-                
-                // Добавляем новый input
-                if self.session.canAddInput(newInput) {
-                    self.session.addInput(newInput)
-                    self.currentInput = newInput
-                    
-                    DispatchQueue.main.async {
-                        self.currentPosition = newPosition
-                    }
-                    print("📷 Switched to \(newPosition == .front ? "front" : "back") camera")
-                }
-                
-                // Обновляем ориентацию для нового connection
-                if let connection = self.videoOutput.connection(with: .video) {
-                    if #available(iOS 17.0, *) {
-                        connection.videoRotationAngle = 90
-                    } else {
-                        connection.videoOrientation = .portrait
-                    }
-                    
-                    // Зеркалим фронтальную камеру
-                    if newPosition == .front {
-                        connection.isVideoMirrored = true
-                    }
-                }
-                
-                self.session.commitConfiguration()
-                
-            } catch {
-                print("❌ Failed to switch camera:", error)
-            }
+            self.switchToDevice(type: .builtInWideAngleCamera, position: newPosition)
         }
     }
     
-    // MARK: - Configuration
-    private func configureSession() {
-        sessionQueue.async {
-            self.session.beginConfiguration()
-            self.session.sessionPreset = .hd1920x1080
-            
-            // Camera Input
-            guard let device = AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: .back
-            ) else {
-                print("❌ Camera not available")
-                self.session.commitConfiguration()
-                return
+    // MARK: - Internal helpers
+    private func switchToDevice(type: AVCaptureDevice.DeviceType, position: AVCaptureDevice.Position) {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInUltraWideCamera, .builtInWideAngleCamera, .builtInTelephotoCamera],
+            mediaType: .video,
+            position: position
+        )
+        guard let device = discovery.devices.first(where: { $0.deviceType == type }) ?? discovery.devices.first else {
+            print("❌ No device for type: \(type) position: \(position)")
+            return
+        }
+        do {
+            let newInput = try AVCaptureDeviceInput(device: device)
+            session.beginConfiguration()
+            if let currentInput = self.currentInput {
+                session.removeInput(currentInput)
             }
-            
-            do {
-                let input = try AVCaptureDeviceInput(device: device)
-                if self.session.canAddInput(input) {
-                    self.session.addInput(input)
-                    self.currentInput = input
-                }
-            } catch {
-                print("❌ Camera input error:", error)
-                self.session.commitConfiguration()
-                return
-            }
-            
-            // Video Output
-            self.videoOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String:
-                    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-            ]
-            self.videoOutput.alwaysDiscardsLateVideoFrames = true
-            self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
-            
-            if self.session.canAddOutput(self.videoOutput) {
-                self.session.addOutput(self.videoOutput)
-            }
-            
-            // Audio Input
-            if let audioDevice = AVCaptureDevice.default(for: .audio) {
-                do {
-                    let audioDeviceInput = try AVCaptureDeviceInput(device: audioDevice)
-                    if self.session.canAddInput(audioDeviceInput) {
-                        self.session.addInput(audioDeviceInput)
-                        self.audioInput = audioDeviceInput
-                        print("✅ Audio input added")
-                    }
-                } catch {
-                    print("⚠️ Could not add audio input: \(error)")
-                }
-            }
-            
-            // Audio Output
-            self.audioOutput.setSampleBufferDelegate(self, queue: self.audioOutputQueue)
-            if self.session.canAddOutput(self.audioOutput) {
-                self.session.addOutput(self.audioOutput)
-                print("✅ Audio output added")
-            }
+            if session.canAddInput(newInput) { session.addInput(newInput) }
+            self.currentInput = newInput
+            self.currentPosition = position
+            if position == .back { self.currentBackDeviceType = device.deviceType }
             
             // Orientation
             if let connection = self.videoOutput.connection(with: .video) {
                 if #available(iOS 17.0, *) {
-                    connection.videoRotationAngle = 90  // Portrait mode
+                    connection.videoRotationAngle = 90
                 } else {
                     connection.videoOrientation = .portrait
                 }
+                if connection.isVideoMirroringSupported {
+                    connection.isVideoMirrored = false
+                }
             }
+            session.commitConfiguration()
             
-            self.session.commitConfiguration()
+            self.updateZoomLimits(for: device)
+            self.setZoom(1.0) // Сбросить на оптический базовый зум
+            
+        } catch {
+            print("❌ switchToDevice error: \(error)")
         }
+    }
+    
+    private func updateZoomLimits(for device: AVCaptureDevice) {
+        if #available(iOS 17.0, *) {
+            self.minZoomFactor = max(1.0, device.minAvailableVideoZoomFactor)
+        } else {
+            self.minZoomFactor = 1.0
+        }
+        self.maxZoomFactor = min(10.0, device.activeFormat.videoMaxZoomFactor)
+        DispatchQueue.main.async { self.currentZoomFactor = max(self.currentZoomFactor, self.minZoomFactor) }
     }
 }
 
@@ -239,6 +284,76 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
         } else if output == audioOutput {
             // Audio
             onAudioSample?(sampleBuffer)
+        }
+    }
+}
+
+// MARK: - Zoom Control
+extension CameraManager {
+    func setZoom(_ factor: CGFloat) {
+        sessionQueue.async {
+            guard let device = self.currentInput?.device else { return }
+            let hardwareMax = device.activeFormat.videoMaxZoomFactor
+            let clampedZoom = max(self.minZoomFactor, min(factor, min(self.maxZoomFactor, hardwareMax)))
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = clampedZoom
+                device.unlockForConfiguration()
+                DispatchQueue.main.async { self.currentZoomFactor = clampedZoom }
+            } catch {
+                print("❌ Failed to set zoom: \(error)")
+            }
+        }
+    }
+    
+    func zoom(to preset: ZoomPreset) {
+        sessionQueue.async {
+            // Подбираем оптимальную камеру под пресет
+            switch preset {
+            case .ultraWide:
+                // Доступно только на back
+                guard self.currentPosition == .back else {
+                    DispatchQueue.main.async { self.setZoom(1.0) }
+                    return
+                }
+                self.switchToDevice(type: .builtInUltraWideCamera, position: .back)
+            case .wide:
+                self.switchToDevice(type: .builtInWideAngleCamera, position: self.currentPosition)
+            case .telephoto:
+                if self.currentPosition == .back {
+                    // Пытаемся включить телекамеру, иначе цифровой 2x на широкоугольной
+                    let discovery = AVCaptureDevice.DiscoverySession(
+                        deviceTypes: [.builtInTelephotoCamera],
+                        mediaType: .video,
+                        position: .back
+                    )
+                    if discovery.devices.isEmpty {
+                        // Нет телекамеры — цифровой зум на широкоугольной
+                        self.switchToDevice(type: .builtInWideAngleCamera, position: .back)
+                        self.setZoom(2.0)
+                    } else {
+                        self.switchToDevice(type: .builtInTelephotoCamera, position: .back)
+                    }
+                } else {
+                    // На фронталке телекамеры нет — цифровой зум 2x
+                    self.setZoom(2.0)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Zoom Presets
+enum ZoomPreset: CGFloat, CaseIterable {
+    case ultraWide = 0.5
+    case wide = 1.0
+    case telephoto = 2.0
+    
+    var title: String {
+        switch self {
+        case .ultraWide: return "0.5×"
+        case .wide: return "1×"
+        case .telephoto: return "2×"
         }
     }
 }

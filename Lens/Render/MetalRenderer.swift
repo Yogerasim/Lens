@@ -14,6 +14,9 @@ final class MetalRenderer: RenderEngine {
     
     /// Callback для получения обработанного кадра (с шейдером)
     var onRenderedFrame: ((CVPixelBuffer) -> Void)?
+    
+    /// Ссылка на CameraManager для получения информации о камере
+    weak var cameraManager: CameraManager?
 
     // MARK: - Private
     private let device = MetalContext.shared.device
@@ -95,14 +98,22 @@ final class MetalRenderer: RenderEngine {
             setupPixelBufferPool(width: textureWidth, height: textureHeight)
         }
 
-        // Создаём uniforms с временем и aspect ratio
+        // Создаём uniforms с правильной ориентацией
         let viewAspect = Float(metalLayer.drawableSize.width / metalLayer.drawableSize.height)
-        let textureAspect = Float(inputTexture.width) / Float(inputTexture.height)
+        let inputWidth = Float(inputTexture.width)
+        let inputHeight = Float(inputTexture.height)
+        let textureAspect = inputWidth / inputHeight
+        
+        // Получаем информацию о камере
+        let rotation = cameraManager?.rotation ?? Float.pi / 2.0
+        let mirror: Float = (cameraManager?.isFrontCamera == true) ? 1.0 : 0.0
 
         var uniforms = ShaderUniforms(
             time: shaderManager.animationTime,
             viewAspect: viewAspect,
-            textureAspect: textureAspect
+            textureAspect: textureAspect,
+            rotation: rotation,
+            mirror: mirror
         )
 
         guard let commandBuffer = queue.makeCommandBuffer() else { return }
