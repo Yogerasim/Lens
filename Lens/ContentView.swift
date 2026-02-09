@@ -13,41 +13,13 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Камера с шейдером на полный экран (aspect-fill)
-            MetalView(renderer: renderer)
-                .ignoresSafeArea(.all)
-                .gesture(
-                    // Pinch-to-zoom как в стандартной камере
-                    MagnificationGesture()
-                        .onChanged { value in
-                            // Фиксируем стартовый зум при начале жеста
-                            if abs(value - 1.0) < 0.02 { // начало жеста
-                                pinchStartZoom = cameraManager.currentZoomFactor
-                            }
-                            let target = pinchStartZoom * value
-                            cameraManager.setZoom(target)
-                        }
-                        .onEnded { _ in
-                            // Зафиксировать конечное значение
-                            pinchStartZoom = cameraManager.currentZoomFactor
-                        }
-                        .simultaneously(with:
-                            // Свайп для переключения шейдеров
-                            DragGesture(minimumDistance: 50)
-                                .onEnded { value in
-                                    let horizontalAmount = value.translation.width
-                                    if horizontalAmount < -50 {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            shaderManager.nextShader()
-                                        }
-                                    } else if horizontalAmount > 50 {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            shaderManager.previousShader()
-                                        }
-                                    }
-                                }
-                        )
-                )
+            CameraCanvasView(
+                renderer: renderer,
+                cameraManager: cameraManager,
+                shaderManager: shaderManager,
+                pinchStartZoom: $pinchStartZoom
+            )
+            .ignoresSafeArea(.all)
 
             // UI поверх камеры
             VStack(spacing: 0) {

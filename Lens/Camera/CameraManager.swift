@@ -139,7 +139,7 @@ final class CameraManager: NSObject, ObservableObject {
                 }
                 // Mirror for front preview if needed (we handle mirroring in renderer via uniforms, so keep disabled here)
                 if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = false
+                    connection.isVideoMirrored = (self.currentPosition == .front)
                 }
             }
             
@@ -245,7 +245,7 @@ final class CameraManager: NSObject, ObservableObject {
                     connection.videoOrientation = .portrait
                 }
                 if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = false
+                    connection.isVideoMirrored = (self.currentPosition == .front)
                 }
             }
             session.commitConfiguration()
