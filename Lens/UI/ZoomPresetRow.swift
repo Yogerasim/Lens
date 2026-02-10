@@ -5,28 +5,21 @@ struct ZoomPresetRow: View {
     @ObservedObject var cameraManager: CameraManager
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 14) {
             ForEach(ZoomPreset.allCases, id: \.self) { preset in
+                let isSelected = abs(cameraManager.currentZoomFactor - preset.rawValue) < 0.02
+
                 Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         cameraManager.zoom(to: preset)
                     }
                 } label: {
                     Text(preset.title)
                         .font(.subheadline.bold())
-                        .foregroundColor(
-                            abs(cameraManager.currentZoomFactor - preset.rawValue) < 0.1
-                            ? .yellow
-                            : .white.opacity(0.8)
-                        )
-                        .frame(width: 44, height: 32)
-                        .background(
-                            abs(cameraManager.currentZoomFactor - preset.rawValue) < 0.1
-                            ? Color.white.opacity(0.2)
-                            : Color.clear
-                        )
-                        .cornerRadius(16)
+                        .foregroundColor(isSelected ? .white : .white.opacity(0.75))
+                        .glassChip(isSelected: isSelected)
                 }
+                .buttonStyle(.plain) // чтобы не ломать вид chip
             }
         }
     }

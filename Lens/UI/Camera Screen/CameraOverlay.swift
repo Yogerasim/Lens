@@ -81,9 +81,7 @@ struct CameraOverlay: View {
                 Image(systemName: "camera.rotate.fill")
                     .font(.title2)
                     .foregroundColor(.white)
-                    .padding(16)
-                    .background(.black.opacity(0.6))
-                    .clipShape(Circle())
+                    .glassCircle(size: 54)
             }
             .offset(x: switchCamOffset.x, y: switchCamOffset.y)
 

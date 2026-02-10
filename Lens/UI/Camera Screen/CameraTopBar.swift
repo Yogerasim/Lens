@@ -8,6 +8,7 @@ struct CameraTopBar: View {
 
     var body: some View {
         HStack {
+            // LEFT: shader + fps
             VStack(alignment: .leading, spacing: 4) {
                 Text(shaderManager.currentShader.rawValue.uppercased())
                     .font(.caption.bold())
@@ -16,14 +17,13 @@ struct CameraTopBar: View {
                     .font(.system(.body, design: .monospaced))
             }
             .foregroundColor(.white)
-            .padding(10)
-            .background(.black.opacity(0.6))
-            .cornerRadius(12)
+            .glassPanel(cornerRadius: 18, padding: 10)
 
             Spacer()
 
+            // CENTER/RIGHT: recording timer chip
             if mediaRecorder.isRecording {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 10, height: 10)
@@ -32,9 +32,11 @@ struct CameraTopBar: View {
                         .font(.system(.body, design: .monospaced))
                 }
                 .foregroundColor(.white)
-                .padding(10)
-                .background(.red.opacity(0.7))
-                .cornerRadius(12)
+                .glassPanel(cornerRadius: 18, padding: 10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
+                )
             }
         }
         .padding(.horizontal, 20)

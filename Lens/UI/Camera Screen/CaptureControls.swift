@@ -16,8 +16,9 @@ struct CaptureControls: View {
                 handleCapture()
             } label: {
                 ZStack {
+                    // внешний контур
                     Circle()
-                        .stroke(Color.white, lineWidth: 4)
+                        .stroke(Color.white.opacity(0.95), lineWidth: 4)
                         .frame(width: 70, height: 70)
 
                     if mediaRecorder.captureMode == .video {
@@ -36,7 +37,15 @@ struct CaptureControls: View {
                             .frame(width: 54, height: 54)
                     }
                 }
+                // лёгкий “glass highlight” при нажатии, но без изменения размеров
+                .overlay(
+                    Circle()
+                        .fill(.white.opacity(0.06))
+                        .frame(width: 70, height: 70)
+                        .opacity(0) // базово невидим
+                )
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
