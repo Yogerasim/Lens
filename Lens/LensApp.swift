@@ -4,10 +4,12 @@ import SwiftUI
 struct LensApp: App {
     
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var mediaStore = AppMediaStore()
     
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(mediaStore)
         }
     }
 }

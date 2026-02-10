@@ -24,6 +24,8 @@ struct CameraOverlay: View {
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var mediaRecorder: MediaRecorder
     @ObservedObject var fps: FPSCounter
+    
+    @State private var isMediaHubPresented = false
 
     var body: some View {
         // ВАЖНО: этот слой всегда занимает весь экран
@@ -43,6 +45,16 @@ struct CameraOverlay: View {
                     // для низа: +y должно поднимать вверх
                     .offset(x: bottomBlockOffset.x, y: -bottomBlockOffset.y)
             }
+            .sheet(isPresented: $isMediaHubPresented) {
+                MediaHubTabView(
+                    onClose: { isMediaHubPresented = false },
+                    onSelectEffect: { effect in
+                        // позже сюда подключим применение эффекта в камере:
+                        // например shaderManager.select(by: effect.shaderKey)
+                        print("Selected effect:", effect.shaderKey)
+                    }
+                )
+            }
     }
 
     // MARK: - Top block (pinned)
@@ -54,7 +66,7 @@ struct CameraOverlay: View {
             fps: fps
         )
         .offset(x: fpsOffset.x, y: fpsOffset.y)
-        .padding(.top, 8) // небольшая “камера-айфон” поправка
+        .padding(Edge.Set.top, 8) // небольшая “камера-айфон” поправка
     }
 
     // MARK: - Bottom block (pinned)
@@ -85,17 +97,18 @@ struct CameraOverlay: View {
             }
             .offset(x: switchCamOffset.x, y: switchCamOffset.y)
 
-            Button { } label: {
+            Button {
+                isMediaHubPresented = true
+            } label: {
                 Image(systemName: "wand.and.stars")
                     .font(.title2)
                     .foregroundColor(.white)
-                    .padding(16)
-                    .background(.black.opacity(0.6))
-                    .clipShape(Circle())
+                    .glassCircle(size: 54)
             }
+            
             .offset(x: effectsOffset.x, y: effectsOffset.y)
         }
-        .padding(.bottom, 8) // аналогично — аккуратно отступить от края
+        .padding(Edge.Set.bottom, 8) // аналогично — аккуратно отступить от края
     }
 }
 
