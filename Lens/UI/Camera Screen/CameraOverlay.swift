@@ -26,6 +26,7 @@ struct CameraOverlay: View {
     @ObservedObject var fps: FPSCounter
     
     @State private var isMediaHubPresented = false
+    @State private var isFlashing = false
 
     var body: some View {
         // ВАЖНО: этот слой всегда занимает весь экран
@@ -45,6 +46,18 @@ struct CameraOverlay: View {
                     // для низа: +y должно поднимать вверх
                     .offset(x: bottomBlockOffset.x, y: -bottomBlockOffset.y)
             }
+            
+            // ✅ FLASH overlay для эффекта съёмки фото
+            .overlay {
+                if isFlashing {
+                    Rectangle()
+                        .fill(Color.black)
+                        .ignoresSafeArea()
+                        .opacity(0.8)
+                        .allowsHitTesting(false)
+                }
+            }
+            
             .sheet(isPresented: $isMediaHubPresented) {
                 MediaHubTabView(
                     onClose: { isMediaHubPresented = false },
@@ -81,7 +94,8 @@ struct CameraOverlay: View {
 
             CaptureControls(
                 cameraManager: cameraManager,
-                mediaRecorder: mediaRecorder
+                mediaRecorder: mediaRecorder,
+                isFlashing: $isFlashing
             )
             .offset(x: captureOffset.x, y: captureOffset.y)
 

@@ -4,6 +4,7 @@ struct CaptureControls: View {
 
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var mediaRecorder: MediaRecorder
+    @Binding var isFlashing: Bool
 
     var body: some View {
         HStack(spacing: 0) {
@@ -61,8 +62,20 @@ struct CaptureControls: View {
             ? mediaRecorder.stopRecording()
             : mediaRecorder.startRecording()
         } else {
+            // Анимация затемнения при съёмке фото
+            withAnimation(.easeOut(duration: 0.1)) {
+                isFlashing = true
+            }
+            
             mediaRecorder.takePhoto()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            
+            // Убираем затемнение через короткое время
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isFlashing = false
+                }
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ struct CameraBottomBar: View {
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var mediaRecorder: MediaRecorder
+    @State private var isFlashing: Bool = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -16,18 +17,18 @@ struct CameraBottomBar: View {
 
             CaptureControls(
                 cameraManager: cameraManager,
-                mediaRecorder: mediaRecorder
+                mediaRecorder: mediaRecorder,
+                isFlashing: $isFlashing
             )
         }
         .padding(.bottom, 20)
     }
 }
 #Preview {
-    CameraOverlay(
+    CameraBottomBar(
         cameraManager: CameraManager(),
         shaderManager: ShaderManager.shared,
-        mediaRecorder: MediaRecorder(),
-        fps: FPSCounter.shared
+        mediaRecorder: MediaRecorder()
     )
     .background(Color.black)
 }
