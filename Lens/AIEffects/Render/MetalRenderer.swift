@@ -4,7 +4,9 @@ import CoreVideo
 import CoreImage
 
 protocol RenderEngine {
-    func render(pixelBuffer: CVPixelBuffer)
+    
+    func render(packet: FramePacket, activeFilter: FilterDefinition?)
+    
 }
 
 final class MetalRenderer: RenderEngine {
@@ -75,7 +77,8 @@ final class MetalRenderer: RenderEngine {
     }
 
     // MARK: - Render
-    func render(pixelBuffer: CVPixelBuffer) {
+    func render(packet: FramePacket, activeFilter: FilterDefinition?) {
+        let pixelBuffer = packet.pixelBuffer
         
         guard metalLayer.drawableSize.width > 0,
               metalLayer.drawableSize.height > 0 else {

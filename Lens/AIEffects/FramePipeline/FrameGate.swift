@@ -3,68 +3,38 @@ import CoreVideo
 import CoreMedia
 
 protocol FrameConsumer: AnyObject {
-    func consume(pixelBuffer: CVPixelBuffer, time: CMTime)
+    func consume(_ packet: FramePacket)
 }
 
 final class FrameGate {
-
-    // MARK: - Config
-    private let targetFPS: Double
     private let minFrameInterval: CMTime
-
-    // MARK: - State
     private var lastFrameTime: CMTime = .zero
     private var isProcessing = false
 
-    // MARK: - Consumer
     weak var consumer: FrameConsumer?
 
-    // MARK: - Queue
-    private let gateQueue = DispatchQueue(
-        label: "frame.gate.queue",
-        qos: .userInteractive
-    )
+    private let gateQueue = DispatchQueue(label: "frame.gate.queue", qos: .userInteractive)
 
-    // MARK: - Init
-    init(targetFPS: Double? = nil) {
-        // Используем FPS из DeviceCapabilities если не указано явно
-        let fps = targetFPS ?? Double(DeviceCapabilities.current.maxFPS)
-        self.targetFPS = fps
-        self.minFrameInterval = CMTime(
-            seconds: 1.0 / fps,
-            preferredTimescale: 600
-        )
-        print("🎯 FrameGate initialized with targetFPS: \(fps)")
+    init(targetFPS: Double) {
+        self.minFrameInterval = CMTime(seconds: 1.0 / targetFPS, preferredTimescale: 600)
     }
 
-    // MARK: - Public API
-    func push(pixelBuffer: CVPixelBuffer, time: CMTime) {
+    func push(_ packet: FramePacket) {
         gateQueue.async {
-            // Drop if busy
-            if self.isProcessing {
-                return
-            }
+            if self.isProcessing { return }
 
-            // Drop if too early
             if self.lastFrameTime != .zero {
-                let delta = CMTimeSubtract(time, self.lastFrameTime)
-                if delta < self.minFrameInterval {
-                    return
-                }
+                let delta = CMTimeSubtract(packet.time, self.lastFrameTime)
+                if delta < self.minFrameInterval { return }
             }
 
-            // Accept frame
             self.isProcessing = true
-            self.lastFrameTime = time
-
-            self.consumer?.consume(pixelBuffer: pixelBuffer, time: time)
+            self.lastFrameTime = packet.time
+            self.consumer?.consume(packet)
         }
     }
 
-    // MARK: - Completion (called by next layer)
     func frameDidFinish() {
-        gateQueue.async {
-            self.isProcessing = false
-        }
+        gateQueue.async { self.isProcessing = false }
     }
 }

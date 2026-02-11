@@ -146,6 +146,14 @@ final class CameraManager: NSObject, ObservableObject {
             // Update zoom limits
             if let device = self.currentInput?.device {
                 self.updateZoomLimits(for: device)
+                
+                // Setup depth output if device supports it
+                if DepthManager.isDepthSupported(for: device) {
+                    print("🔵 CameraManager: Device supports depth, setting up DepthManager...")
+                    DepthManager.shared.setupDepthOutput(for: self.session)
+                } else {
+                    print("⚠️ CameraManager: Device does not support depth")
+                }
             }
             
             self.session.commitConfiguration()

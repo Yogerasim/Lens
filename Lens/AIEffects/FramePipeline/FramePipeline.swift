@@ -5,8 +5,11 @@ final class FramePipeline {
     static let shared = FramePipeline()
 
     // Используем динамический FPS на основе устройства
-    let gate = FrameGate()
+    let gate = FrameGate(targetFPS: 120)
     let mlEngine = MLInferenceEngine()
+    
+    /// Текущий активный фильтр
+    var activeFilter: FilterDefinition? = FilterLibrary.shared.filters.first
 
     var renderer: RenderEngine?
 
@@ -15,7 +18,8 @@ final class FramePipeline {
 
         mlEngine.onResult = { [weak self] pixelBuffer, time in
             DispatchQueue.main.async {
-                self?.renderer?.render(pixelBuffer: pixelBuffer)
+                let packet = FramePacket(pixelBuffer: pixelBuffer, time: time)
+                self?.renderer?.render(packet: packet, activeFilter: self?.activeFilter)
             }
         }
         

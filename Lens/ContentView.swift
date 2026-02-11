@@ -57,7 +57,8 @@ struct ContentView: View {
         }
 
         cameraManager.onFrame = { pixelBuffer, time in
-            FramePipeline.shared.gate.push(pixelBuffer: pixelBuffer, time: time)
+            let packet = FramePacket(pixelBuffer: pixelBuffer, time: time)
+            FramePipeline.shared.gate.push(packet)
         }
 
         cameraManager.onAudioSample = { sampleBuffer in
