@@ -48,8 +48,10 @@ vertex VertexOut vertex_main(
     // 2) Aspect-fill через масштаб геометрии (позиции), НЕ UV
     // Эффективное соотношение сторон текстуры с учётом поворота: если повёрнута на 90°/270°, меняем местами
     float effectiveTextureAspect = uniforms.textureAspect;
-    float rotMod = fmod(uniforms.rotation, 3.14159265f); // π
-    if (abs(rotMod - 1.57079633f) < 0.0001f) { // ~π/2
+    float absRotation = abs(uniforms.rotation);
+    // Проверяем близость к π/2 (90°) или 3π/2 (270°)
+    bool isRotated90 = (abs(absRotation - 1.57079633f) < 0.1f) || (abs(absRotation - 4.71238898f) < 0.1f);
+    if (isRotated90) {
         effectiveTextureAspect = 1.0 / effectiveTextureAspect;
     }
 

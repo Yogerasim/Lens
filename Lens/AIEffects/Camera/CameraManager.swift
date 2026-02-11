@@ -21,9 +21,14 @@ final class CameraManager: NSObject, ObservableObject {
         return currentPosition == .front
     }
     
-    /// Поворот для портретного режима (90 градусов в радианах)
+    /// Поворот для портретного режима
+    /// Back camera: π/2 (90°), Front camera: -π/2 (-90°)
     var rotation: Float {
-        return Float.pi / 2.0  // 90 градусов для портрета
+        if currentPosition == .front {
+            return -Float.pi / 2.0  // -90 градусов для фронталки
+        } else {
+            return Float.pi / 2.0   // 90 градусов для задней
+        }
     }
     
     /// Текущий зум фактор
