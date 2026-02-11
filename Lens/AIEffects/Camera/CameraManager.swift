@@ -58,20 +58,27 @@ final class CameraManager: NSObject, ObservableObject {
         sessionQueue.async {
             self.session.beginConfiguration()
             
-            // Preset
-            if self.session.canSetSessionPreset(.high) {
-                self.session.sessionPreset = .high
-            }
+            // Используем inputPriority чтобы вручную выбирать формат с depth
+            self.session.sessionPreset = .inputPriority
             
-            // Video device selection based on current position
-            let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
-            let discovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: desiredTypes,
-                mediaType: .video,
-                position: self.currentPosition
-            )
-            // Prefer wide for initial
-            let device = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first
+            // Пробуем сначала LiDAR камеру для depth, иначе обычную широкоугольную
+            var videoDevice: AVCaptureDevice?
+            
+            // Попробуем LiDAR камеру (builtInLiDARDepthCamera)
+            if let lidarDevice = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: self.currentPosition) {
+                videoDevice = lidarDevice
+                print("✅ CameraManager: Using LiDAR depth camera")
+            } else {
+                // Fallback на обычную широкоугольную камеру
+                let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
+                let discovery = AVCaptureDevice.DiscoverySession(
+                    deviceTypes: desiredTypes,
+                    mediaType: .video,
+                    position: self.currentPosition
+                )
+                videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first
+                print("🔵 CameraManager: Using standard camera (no LiDAR)")
+            }
             
             // Remove old inputs if any
             if let existing = self.currentInput {
@@ -79,14 +86,14 @@ final class CameraManager: NSObject, ObservableObject {
                 self.currentInput = nil
             }
             
-            if let videoDevice = device {
+            if let device = videoDevice {
                 do {
-                    let input = try AVCaptureDeviceInput(device: videoDevice)
+                    let input = try AVCaptureDeviceInput(device: device)
                     if self.session.canAddInput(input) {
                         self.session.addInput(input)
                         self.currentInput = input
                         if self.currentPosition == .back {
-                            self.currentBackDeviceType = videoDevice.deviceType
+                            self.currentBackDeviceType = device.deviceType
                         }
                     }
                 } catch {
@@ -143,17 +150,12 @@ final class CameraManager: NSObject, ObservableObject {
                 }
             }
             
-            // Update zoom limits
+            // Update zoom limits and configure depth
             if let device = self.currentInput?.device {
                 self.updateZoomLimits(for: device)
                 
-                // Setup depth output if device supports it
-                if DepthManager.isDepthSupported(for: device) {
-                    print("🔵 CameraManager: Device supports depth, setting up DepthManager...")
-                    DepthManager.shared.setupDepthOutput(for: self.session)
-                } else {
-                    print("⚠️ CameraManager: Device does not support depth")
-                }
+                // Configure format with depth support
+                self.configureDepthFormat(for: device)
             }
             
             self.session.commitConfiguration()
@@ -274,6 +276,49 @@ final class CameraManager: NSObject, ObservableObject {
         }
         self.maxZoomFactor = min(10.0, device.activeFormat.videoMaxZoomFactor)
         DispatchQueue.main.async { self.currentZoomFactor = max(self.currentZoomFactor, self.minZoomFactor) }
+    }
+    
+    // MARK: - Depth Configuration
+    private func configureDepthFormat(for device: AVCaptureDevice) {
+        // Find formats that support depth
+        let depthFormats = device.formats.filter { format in
+            !format.supportedDepthDataFormats.isEmpty
+        }
+        
+        guard !depthFormats.isEmpty else {
+            print("⚠️ CameraManager: No formats with depth support found for \(device.localizedName)")
+            return
+        }
+        
+        print("🔵 CameraManager: Found \(depthFormats.count) formats with depth support")
+        
+        // Find the best format with depth and 30fps support
+        for format in depthFormats {
+            let ranges = format.videoSupportedFrameRateRanges
+            let supports30fps = ranges.contains { $0.maxFrameRate >= 30 }
+            
+            guard supports30fps else { continue }
+            guard let depthFormat = format.supportedDepthDataFormats.first else { continue }
+            
+            do {
+                try device.lockForConfiguration()
+                device.activeFormat = format
+                device.activeDepthDataFormat = depthFormat
+                device.unlockForConfiguration()
+                
+                let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                let depthDim = CMVideoFormatDescriptionGetDimensions(depthFormat.formatDescription)
+                print("✅ CameraManager: Configured depth format - video: \(dim.width)x\(dim.height), depth: \(depthDim.width)x\(depthDim.height)")
+                
+                // Setup DepthManager
+                DepthManager.shared.setupDepthOutput(for: self.session)
+                return
+            } catch {
+                print("❌ CameraManager: Failed to configure depth format: \(error)")
+            }
+        }
+        
+        print("⚠️ CameraManager: Could not find suitable depth format with 30fps")
     }
 }
 

@@ -136,12 +136,19 @@ final class MetalRenderer: RenderEngine {
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
 
+        // Захватываем обработанный кадр ДО present (после present drawable недействителен)
+        var capturedBuffer: CVPixelBuffer?
+        if onRenderedFrame != nil {
+            capturedBuffer = captureRenderedFrame(from: drawable.texture)
+        }
+        
         commandBuffer.present(drawable)
         
-        // Захватываем обработанный кадр если есть callback
-        if onRenderedFrame != nil {
-            commandBuffer.addCompletedHandler { [weak self] _ in
-                self?.captureRenderedFrame(from: drawable.texture)
+        // Отправляем захваченный кадр после завершения GPU работы
+        if let buffer = capturedBuffer {
+            let callback = onRenderedFrame
+            commandBuffer.addCompletedHandler { _ in
+                callback?(buffer)
             }
         }
         
@@ -149,20 +156,20 @@ final class MetalRenderer: RenderEngine {
     }
     
     // MARK: - Capture Rendered Frame
-    private func captureRenderedFrame(from texture: MTLTexture) {
-        guard let pool = outputPixelBufferPool else { return }
+    private func captureRenderedFrame(from texture: MTLTexture) -> CVPixelBuffer? {
+        guard let pool = outputPixelBufferPool else { return nil }
         
         var pixelBuffer: CVPixelBuffer?
         let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBuffer)
         
         guard status == kCVReturnSuccess, let outputBuffer = pixelBuffer else {
-            return
+            return nil
         }
         
         CVPixelBufferLockBaseAddress(outputBuffer, [])
         defer { CVPixelBufferUnlockBaseAddress(outputBuffer, []) }
         
-        guard let baseAddress = CVPixelBufferGetBaseAddress(outputBuffer) else { return }
+        guard let baseAddress = CVPixelBufferGetBaseAddress(outputBuffer) else { return nil }
         
         let bytesPerRow = CVPixelBufferGetBytesPerRow(outputBuffer)
         let bufferWidth = CVPixelBufferGetWidth(outputBuffer)
@@ -172,8 +179,7 @@ final class MetalRenderer: RenderEngine {
         let region = MTLRegionMake2D(0, 0, bufferWidth, bufferHeight)
         texture.getBytes(baseAddress, bytesPerRow: bytesPerRow, from: region, mipmapLevel: 0)
         
-        // Отправляем обработанный кадр
-        onRenderedFrame?(outputBuffer)
+        return outputBuffer
     }
 
     // MARK: - Helpers
