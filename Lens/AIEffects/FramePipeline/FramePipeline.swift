@@ -5,7 +5,7 @@ final class FramePipeline {
     static let shared = FramePipeline()
 
     // Используем динамический FPS на основе устройства
-    let gate = FrameGate(targetFPS: 120)
+    let gate = FrameGate()  // внутри берёт DeviceCapabilities.current.maxFPS
     let mlEngine = MLInferenceEngine()
     
     /// Текущий активный фильтр
@@ -19,7 +19,9 @@ final class FramePipeline {
         mlEngine.onResult = { [weak self] pixelBuffer, time in
             DispatchQueue.main.async {
                 let packet = FramePacket(pixelBuffer: pixelBuffer, time: time)
-                self?.renderer?.render(packet: packet, activeFilter: self?.activeFilter)
+                // Получаем depth данные из DepthManager если доступны
+                let depthData = DepthManager.shared.latestDepthMap
+                self?.renderer?.render(packet: packet, activeFilter: self?.activeFilter, depthPixelBuffer: depthData)
             }
         }
         

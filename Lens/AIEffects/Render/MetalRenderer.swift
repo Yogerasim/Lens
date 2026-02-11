@@ -5,7 +5,7 @@ import CoreImage
 
 protocol RenderEngine {
     
-    func render(packet: FramePacket, activeFilter: FilterDefinition?)
+    func render(packet: FramePacket, activeFilter: FilterDefinition?, depthPixelBuffer: CVPixelBuffer?)
     
 }
 
@@ -77,7 +77,7 @@ final class MetalRenderer: RenderEngine {
     }
 
     // MARK: - Render
-    func render(packet: FramePacket, activeFilter: FilterDefinition?) {
+    func render(packet: FramePacket, activeFilter: FilterDefinition?, depthPixelBuffer: CVPixelBuffer?) {
         let pixelBuffer = packet.pixelBuffer
         
         guard metalLayer.drawableSize.width > 0,
@@ -91,6 +91,7 @@ final class MetalRenderer: RenderEngine {
             let drawable = metalLayer.nextDrawable(),
             let inputTexture = makeTexture(from: pixelBuffer)
         else { return }
+        
         
         // Получаем размеры drawable (размер экрана)
         let textureWidth = drawable.texture.width
@@ -133,6 +134,7 @@ final class MetalRenderer: RenderEngine {
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<ShaderUniforms>.size, index: 0)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<ShaderUniforms>.size, index: 0)
         encoder.setFragmentTexture(inputTexture, index: 0)
+        
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
 
@@ -186,32 +188,23 @@ final class MetalRenderer: RenderEngine {
     private lazy var ciContext = CIContext(mtlDevice: device)
 
     private func makeTexture(from pixelBuffer: CVPixelBuffer) -> MTLTexture? {
-
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        descriptor.usage = [.shaderRead, .shaderWrite, .renderTarget]
-
-        guard let texture = device.makeTexture(descriptor: descriptor) else {
-            return nil
-        }
-
-        ciContext.render(
-            ciImage,
-            to: texture,
-            commandBuffer: nil,
-            bounds: CGRect(x: 0, y: 0, width: width, height: height),
-            colorSpace: CGColorSpaceCreateDeviceRGB()
+        var cvTexture: CVMetalTexture?
+        let status = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault,
+            TextureCache.shared.cache,
+            pixelBuffer,
+            nil,
+            .bgra8Unorm,
+            width,
+            height,
+            0,
+            &cvTexture
         )
 
-        return texture
+        guard status == kCVReturnSuccess, let cvTexture else { return nil }
+        return CVMetalTextureGetTexture(cvTexture)
     }
 }

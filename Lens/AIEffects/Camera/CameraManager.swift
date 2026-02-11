@@ -156,6 +156,9 @@ final class CameraManager: NSObject, ObservableObject {
                 
                 // Configure format with depth support
                 self.configureDepthFormat(for: device)
+                
+                // Configure frame rate to max FPS
+                self.configureFrameRate(for: device)
             }
             
             self.session.commitConfiguration()
@@ -319,6 +322,60 @@ final class CameraManager: NSObject, ObservableObject {
         }
         
         print("⚠️ CameraManager: Could not find suitable depth format with 30fps")
+    }
+    
+    // MARK: - Frame Rate Configuration
+    private func configureFrameRate(for device: AVCaptureDevice) {
+        let targetFPS = Double(DeviceCapabilities.current.maxFPS)
+        
+        // Найдём формат, поддерживающий target FPS
+        var bestFormat: AVCaptureDevice.Format?
+        var bestFrameRateRange: AVFrameRateRange?
+        
+        for format in device.formats {
+            for range in format.videoSupportedFrameRateRanges {
+                if range.maxFrameRate >= targetFPS {
+                    // Предпочитаем формат с более высоким разрешением
+                    if bestFormat == nil {
+                        bestFormat = format
+                        bestFrameRateRange = range
+                    } else {
+                        let currentDim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                        let bestDim = CMVideoFormatDescriptionGetDimensions(bestFormat!.formatDescription)
+                        if currentDim.width * currentDim.height > bestDim.width * bestDim.height {
+                            bestFormat = format
+                            bestFrameRateRange = range
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard let format = bestFormat, let range = bestFrameRateRange else {
+            print("⚠️ CameraManager: No format supports \(targetFPS) FPS")
+            return
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Устанавливаем формат если он отличается от текущего
+            if device.activeFormat != format {
+                device.activeFormat = format
+            }
+            
+            // Устанавливаем frame rate
+            let frameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+            device.activeVideoMinFrameDuration = frameDuration
+            device.activeVideoMaxFrameDuration = frameDuration
+            
+            device.unlockForConfiguration()
+            
+            let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            print("✅ CameraManager: Configured \(Int(targetFPS)) FPS at \(dim.width)x\(dim.height)")
+        } catch {
+            print("❌ CameraManager: Failed to configure frame rate: \(error)")
+        }
     }
 }
 
