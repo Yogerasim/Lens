@@ -242,6 +242,10 @@ final class CameraManager: NSObject, ObservableObject {
         do {
             let newInput = try AVCaptureDeviceInput(device: device)
             session.beginConfiguration()
+            
+            // Удаляем depth output если меняем камеру
+            DepthManager.shared.removeDepthOutput(from: session)
+            
             if let currentInput = self.currentInput {
                 session.removeInput(currentInput)
             }
@@ -257,10 +261,20 @@ final class CameraManager: NSObject, ObservableObject {
                 } else {
                     connection.videoOrientation = .portrait
                 }
+                // Mirror всегда выключен — зеркалим в шейдере
                 if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = (self.currentPosition == .front)
+                    connection.isVideoMirrored = false
                 }
             }
+            
+            // Настраиваем FPS для новой камеры
+            self.configureFrameRate(for: device)
+            
+            // LiDAR только на back camera с wide (x1)
+            if position == .back && type == .builtInWideAngleCamera {
+                self.configureDepthFormat(for: device)
+            }
+            
             session.commitConfiguration()
             
             self.updateZoomLimits(for: device)
@@ -283,6 +297,8 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Depth Configuration
     private func configureDepthFormat(for device: AVCaptureDevice) {
+        let targetFPS = Double(DeviceCapabilities.current.maxFPS)
+        
         // Find formats that support depth
         let depthFormats = device.formats.filter { format in
             !format.supportedDepthDataFormats.isEmpty
@@ -295,23 +311,29 @@ final class CameraManager: NSObject, ObservableObject {
         
         print("🔵 CameraManager: Found \(depthFormats.count) formats with depth support")
         
-        // Find the best format with depth and 30fps support
+        // Find the best format with depth and target FPS support
         for format in depthFormats {
             let ranges = format.videoSupportedFrameRateRanges
-            let supports30fps = ranges.contains { $0.maxFrameRate >= 30 }
+            let supportsTargetFPS = ranges.contains { $0.maxFrameRate >= targetFPS }
             
-            guard supports30fps else { continue }
+            guard supportsTargetFPS else { continue }
             guard let depthFormat = format.supportedDepthDataFormats.first else { continue }
             
             do {
                 try device.lockForConfiguration()
                 device.activeFormat = format
                 device.activeDepthDataFormat = depthFormat
+                
+                // Устанавливаем target FPS
+                let frameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                device.activeVideoMinFrameDuration = frameDuration
+                device.activeVideoMaxFrameDuration = frameDuration
+                
                 device.unlockForConfiguration()
                 
                 let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 let depthDim = CMVideoFormatDescriptionGetDimensions(depthFormat.formatDescription)
-                print("✅ CameraManager: Configured depth format - video: \(dim.width)x\(dim.height), depth: \(depthDim.width)x\(depthDim.height)")
+                print("✅ CameraManager: Configured depth format - video: \(dim.width)x\(dim.height), depth: \(depthDim.width)x\(depthDim.height) at \(Int(targetFPS)) FPS")
                 
                 // Setup DepthManager
                 DepthManager.shared.setupDepthOutput(for: self.session)
@@ -321,7 +343,7 @@ final class CameraManager: NSObject, ObservableObject {
             }
         }
         
-        print("⚠️ CameraManager: Could not find suitable depth format with 30fps")
+        print("⚠️ CameraManager: Could not find suitable depth format with \(Int(targetFPS)) FPS")
     }
     
     // MARK: - Frame Rate Configuration
