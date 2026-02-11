@@ -8,6 +8,7 @@ struct Uniforms {
     float textureAspect;
     float rotation;    // поворот в радианах
     float mirror;      // зеркалирование (0.0 или 1.0)
+    float hasDepth;    // есть ли depth данные (0.0 или 1.0)
 };
 
 // MARK: - Vertex Output
@@ -468,3 +469,138 @@ fragment float4 fragment_neuralpainter(
     
     return float4(clamp(finalColor, 0.0, 1.0), 1.0);
 }
+
+// ============================================================================
+// MARK: - DEPTH FOG SHADER (использует LiDAR depth)
+// ============================================================================
+fragment float4 fragment_depthfog(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    texture2d<float> depthTex [[texture(1)]],
+    constant Uniforms &uniforms [[buffer(0)]]
+) {
+    constexpr sampler s(address::clamp_to_edge, filter::linear);
+    
+    float2 uv = in.uv;
+    float time = uniforms.time;
+    
+    // --- 1. Получаем цвет камеры ---
+    float4 color = tex.sample(s, uv);
+    
+    // --- 2. Если нет depth данных — показываем оригинал с индикатором ---
+    if (uniforms.hasDepth < 0.5) {
+        // Добавляем красную рамку как индикатор отсутствия depth
+        float border = 0.02;
+        if (uv.x < border || uv.x > 1.0 - border || uv.y < border || uv.y > 1.0 - border) {
+            return float4(1.0, 0.2, 0.2, 1.0); // красная рамка
+        }
+        return color;
+    }
+    
+    // --- 3. Получаем depth значение ---
+    float depth = depthTex.sample(s, uv).r;
+    
+    // Нормализуем depth (обычно в метрах, ограничиваем 0-5м)
+    float normalizedDepth = clamp(depth / 5.0, 0.0, 1.0);
+    
+    // --- 4. Создаём туман на основе глубины ---
+    // Ближе = меньше тумана, дальше = больше тумана
+    float fogAmount = smoothstep(0.1, 0.8, normalizedDepth);
+    
+    // Анимированный цвет тумана
+    float3 fogColor = float3(
+        0.5 + 0.2 * sin(time * 0.3),
+        0.6 + 0.2 * sin(time * 0.4 + 1.0),
+        0.8 + 0.2 * sin(time * 0.5 + 2.0)
+    );
+    
+    // --- 5. Смешиваем камеру с туманом ---
+    float3 finalColor = mix(color.rgb, fogColor, fogAmount * 0.7);
+    
+    // --- 6. Добавляем depth-based контур (края объектов) ---
+    float2 texSize = float2(depthTex.get_width(), depthTex.get_height());
+    float2 pixelSize = 1.0 / texSize;
+    
+    float depthL = depthTex.sample(s, uv + float2(-pixelSize.x, 0)).r;
+    float depthR = depthTex.sample(s, uv + float2(pixelSize.x, 0)).r;
+    float depthU = depthTex.sample(s, uv + float2(0, -pixelSize.y)).r;
+    float depthD = depthTex.sample(s, uv + float2(0, pixelSize.y)).r;
+    
+    float depthEdge = abs(depthL - depthR) + abs(depthU - depthD);
+    float edgeStrength = smoothstep(0.05, 0.2, depthEdge);
+    
+    // Неоновый контур на границах глубины
+    float3 edgeColor = float3(0.0, 1.0, 0.8) * edgeStrength;
+    finalColor += edgeColor * 0.5;
+    
+    // --- 7. Показываем индикатор глубины в углу (debug) ---
+    if (uv.x < 0.15 && uv.y > 0.85) {
+        // Маленький квадрат показывает depth
+        float depthVis = normalizedDepth;
+        return float4(depthVis, depthVis * 0.5, 1.0 - depthVis, 1.0);
+    }
+    
+    return float4(finalColor, 1.0);
+}
+
+// ============================================================================
+// MARK: - DEPTH OUTLINE SHADER (контуры по глубине)
+// ============================================================================
+fragment float4 fragment_depthoutline(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    texture2d<float> depthTex [[texture(1)]],
+    constant Uniforms &uniforms [[buffer(0)]]
+) {
+    constexpr sampler s(address::clamp_to_edge, filter::linear);
+    
+    float2 uv = in.uv;
+    float time = uniforms.time;
+    
+    float4 color = tex.sample(s, uv);
+    
+    // Без depth — просто показываем камеру
+    if (uniforms.hasDepth < 0.5) {
+        return color;
+    }
+    
+    // Получаем depth
+    float depth = depthTex.sample(s, uv).r;
+    float normalizedDepth = clamp(depth / 5.0, 0.0, 1.0);
+    
+    // Sobel по depth для контуров
+    float2 texSize = float2(depthTex.get_width(), depthTex.get_height());
+    float2 ps = 1.0 / texSize;
+    
+    float tl = depthTex.sample(s, uv + float2(-ps.x, -ps.y)).r;
+    float t  = depthTex.sample(s, uv + float2(0, -ps.y)).r;
+    float tr = depthTex.sample(s, uv + float2(ps.x, -ps.y)).r;
+    float l  = depthTex.sample(s, uv + float2(-ps.x, 0)).r;
+    float r  = depthTex.sample(s, uv + float2(ps.x, 0)).r;
+    float bl = depthTex.sample(s, uv + float2(-ps.x, ps.y)).r;
+    float b  = depthTex.sample(s, uv + float2(0, ps.y)).r;
+    float br = depthTex.sample(s, uv + float2(ps.x, ps.y)).r;
+    
+    float sobelX = -tl - 2.0*l - bl + tr + 2.0*r + br;
+    float sobelY = -tl - 2.0*t - tr + bl + 2.0*b + br;
+    float edge = sqrt(sobelX * sobelX + sobelY * sobelY);
+    
+    // Сильный контур
+    float edgeStrength = smoothstep(0.03, 0.15, edge);
+    
+    // Цвет линий меняется от глубины
+    float3 lineColor = float3(
+        1.0 - normalizedDepth,
+        0.5 + 0.5 * sin(time + normalizedDepth * 3.0),
+        normalizedDepth
+    );
+    
+    // Чёрный фон + цветные контуры
+    float3 finalColor = mix(float3(0.02), lineColor, edgeStrength);
+    
+    // Добавляем немного оригинального цвета в близких объектах
+    finalColor = mix(finalColor, color.rgb * 0.3, (1.0 - normalizedDepth) * 0.4);
+    
+    return float4(finalColor, 1.0);
+}
+

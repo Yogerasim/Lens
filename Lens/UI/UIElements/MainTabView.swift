@@ -2,19 +2,16 @@ import SwiftUI
 
 struct MediaHubTabView: View {
 
-    @StateObject private var store = AppMediaStore()
-
     /// Закрыть хаб (например, dismiss sheet)
     var onClose: (() -> Void)? = nil
 
-    /// Выбор эффекта → ты потом вернёшься в камеру и применишь shaderKey
-    var onSelectEffect: (EffectItem) -> Void
+    /// Выбор эффекта → применить фильтр в камере
+    var onSelectEffect: (FilterDefinition) -> Void
 
     var body: some View {
         TabView {
             NavigationStack {
                 RecordingsView()
-                    .environmentObject(store)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button("Закрыть") { onClose?() }
@@ -31,11 +28,10 @@ struct MediaHubTabView: View {
             }
 
             NavigationStack {
-                EffectsLibraryView { effect in
-                    onSelectEffect(effect)
+                EffectsLibraryView { filter in
+                    onSelectEffect(filter)
                     onClose?()
                 }
-                .environmentObject(store)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Закрыть") { onClose?() }

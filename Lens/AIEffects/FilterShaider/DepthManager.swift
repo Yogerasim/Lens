@@ -8,9 +8,10 @@ final class DepthManager: NSObject {
 
     private var depthOutput: AVCaptureDepthDataOutput?
     private let depthQueue = DispatchQueue(label: "depth.data.queue", qos: .userInitiated)
-
+    private var lastLogTime: CMTime = .invalid
+    private let logInterval = CMTime(seconds: 1.0, preferredTimescale: 600)
     /// Последняя depth map (CVPixelBuffer). Формат зависит от камеры (часто DepthFloat16 / Disparity).
-    private(set) var latestDepthMap: CVPixelBuffer?
+    private(set) var latestDepthPixelBuffer: CVPixelBuffer?
     private(set) var latestDepthTime: CMTime = .invalid
 
     /// Callback (если нужно)
@@ -34,10 +35,10 @@ final class DepthManager: NSObject {
         let output = AVCaptureDepthDataOutput()
         output.setDelegate(self, callbackQueue: depthQueue)
 
-        // ✅ FIX #2: discard late
+        // ✅ FIX #2: discard late depth
         output.alwaysDiscardsLateDepthData = true
 
-        // (опционально) Filtering часто добавляет latency. Для real-time я бы выключил:
+        // Filtering часто добавляет latency — для real-time лучше выключить
         output.isFilteringEnabled = false
 
         guard session.canAddOutput(output) else {
@@ -65,7 +66,7 @@ final class DepthManager: NSObject {
         session.removeOutput(out)
         depthOutput = nil
         isActive = false
-        latestDepthMap = nil
+        latestDepthPixelBuffer = nil
         latestDepthTime = .invalid
         lastDeliveredTime = .invalid
         print("🔵 DepthManager: Depth output removed")
@@ -96,15 +97,21 @@ extension DepthManager: AVCaptureDepthDataOutputDelegate {
         // ✅ FIX #1: NO conversion
         let depthMap = depthData.depthDataMap
 
-        latestDepthMap = depthMap
+        latestDepthPixelBuffer = depthMap
         latestDepthTime = timestamp
 
-        // Логи лучше тоже троттлить, но оставим коротко:
         let w = CVPixelBufferGetWidth(depthMap)
         let h = CVPixelBufferGetHeight(depthMap)
         print("📊 DepthManager: depth \(w)x\(h), ts: \(timestamp.seconds)")
 
         onDepthMap?(depthMap, timestamp)
+        
+        if lastLogTime.isValid == false || CMTimeSubtract(timestamp, lastLogTime) > logInterval {
+            lastLogTime = timestamp
+            let w = CVPixelBufferGetWidth(depthMap)
+            let h = CVPixelBufferGetHeight(depthMap)
+            print("📊 DepthManager: depth \(w)x\(h), ts: \(timestamp.seconds)")
+        }
     }
 
     func depthDataOutput(

@@ -5,7 +5,7 @@ import CoreImage
 
 protocol RenderEngine {
     
-    func render(packet: FramePacket, activeFilter: FilterDefinition?, depthPixelBuffer: CVPixelBuffer?)
+    func render(packet: FramePacket, activeFilter: FilterDefinition?)
     
 }
 
@@ -31,6 +31,22 @@ final class MetalRenderer: RenderEngine {
     
     // Для захвата кадров
     private var outputPixelBufferPool: CVPixelBufferPool?
+    
+    // Fallback depth текстура (1x1 черная) для шейдеров когда depth недоступен
+    private lazy var placeholderDepthTexture: MTLTexture = {
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r32Float,
+            width: 1,
+            height: 1,
+            mipmapped: false
+        )
+        desc.usage = [.shaderRead]
+        let tex = device.makeTexture(descriptor: desc)!
+        // Заполняем нулями (максимальная "дальность")
+        var zero: Float = 0.0
+        tex.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, withBytes: &zero, bytesPerRow: 4)
+        return tex
+    }()
 
     // MARK: - Init
     init(layer: CAMetalLayer) {
@@ -77,8 +93,9 @@ final class MetalRenderer: RenderEngine {
     }
 
     // MARK: - Render
-    func render(packet: FramePacket, activeFilter: FilterDefinition?, depthPixelBuffer: CVPixelBuffer?) {
+    func render(packet: FramePacket, activeFilter: FilterDefinition?) {
         let pixelBuffer = packet.pixelBuffer
+        let depthPixelBuffer = packet.depthPixelBuffer
         
         guard metalLayer.drawableSize.width > 0,
               metalLayer.drawableSize.height > 0 else {
@@ -92,6 +109,17 @@ final class MetalRenderer: RenderEngine {
             let inputTexture = makeTexture(from: pixelBuffer)
         else { return }
         
+        // Создаём depth текстуру или используем placeholder
+        let depthTexture: MTLTexture
+        let hasDepth: Float
+        if let depthBuffer = depthPixelBuffer,
+           let dTex = makeDepthTexture(from: depthBuffer) {
+            depthTexture = dTex
+            hasDepth = 1.0
+        } else {
+            depthTexture = placeholderDepthTexture
+            hasDepth = 0.0
+        }
         
         // Получаем размеры drawable (размер экрана)
         let textureWidth = drawable.texture.width
@@ -117,7 +145,8 @@ final class MetalRenderer: RenderEngine {
             viewAspect: viewAspect,
             textureAspect: textureAspect,
             rotation: rotation,
-            mirror: mirror
+            mirror: mirror,
+            hasDepth: hasDepth
         )
 
         guard let commandBuffer = queue.makeCommandBuffer() else { return }
@@ -134,6 +163,7 @@ final class MetalRenderer: RenderEngine {
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<ShaderUniforms>.size, index: 0)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<ShaderUniforms>.size, index: 0)
         encoder.setFragmentTexture(inputTexture, index: 0)
+        encoder.setFragmentTexture(depthTexture, index: 1)  // Depth texture at index 1
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
@@ -188,23 +218,84 @@ final class MetalRenderer: RenderEngine {
     private lazy var ciContext = CIContext(mtlDevice: device)
 
     private func makeTexture(from pixelBuffer: CVPixelBuffer) -> MTLTexture? {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        var cvTexture: CVMetalTexture?
-        let status = CVMetalTextureCacheCreateTextureFromImage(
-            kCFAllocatorDefault,
-            TextureCache.shared.cache,
-            pixelBuffer,
-            nil,
-            .bgra8Unorm,
-            width,
-            height,
-            0,
-            &cvTexture
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite, .renderTarget]
+
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            return nil
+        }
+
+        ciContext.render(
+            ciImage,
+            to: texture,
+            commandBuffer: nil,
+            bounds: CGRect(x: 0, y: 0, width: width, height: height),
+            colorSpace: CGColorSpaceCreateDeviceRGB()
         )
 
-        guard status == kCVReturnSuccess, let cvTexture else { return nil }
-        return CVMetalTextureGetTexture(cvTexture)
+        return texture
+    }
+    
+    // MARK: - Depth Texture
+    private func makeDepthTexture(from depthBuffer: CVPixelBuffer) -> MTLTexture? {
+        let width = CVPixelBufferGetWidth(depthBuffer)
+        let height = CVPixelBufferGetHeight(depthBuffer)
+        
+        // Определяем формат depth буфера
+        let pixelFormat = CVPixelBufferGetPixelFormatType(depthBuffer)
+        let metalFormat: MTLPixelFormat
+        
+        switch pixelFormat {
+        case kCVPixelFormatType_DepthFloat32:
+            metalFormat = .r32Float
+        case kCVPixelFormatType_DepthFloat16:
+            metalFormat = .r16Float
+        case kCVPixelFormatType_DisparityFloat32:
+            metalFormat = .r32Float
+        case kCVPixelFormatType_DisparityFloat16:
+            metalFormat = .r16Float
+        default:
+            print("⚠️ MetalRenderer: Unknown depth format: \(pixelFormat)")
+            return nil
+        }
+        
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: metalFormat,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead]
+        
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            return nil
+        }
+        
+        CVPixelBufferLockBaseAddress(depthBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthBuffer, .readOnly) }
+        
+        guard let baseAddress = CVPixelBufferGetBaseAddress(depthBuffer) else {
+            return nil
+        }
+        
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(depthBuffer)
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, width, height),
+            mipmapLevel: 0,
+            withBytes: baseAddress,
+            bytesPerRow: bytesPerRow
+        )
+        
+        return texture
     }
 }

@@ -60,11 +60,14 @@ struct CameraOverlay: View {
             
             .sheet(isPresented: $isMediaHubPresented) {
                 MediaHubTabView(
-                    onClose: { isMediaHubPresented = false },
-                    onSelectEffect: { effect in
-                        // позже сюда подключим применение эффекта в камере:
-                        // например shaderManager.select(by: effect.shaderKey)
-                        print("Selected effect:", effect.shaderKey)
+                    onClose: { 
+                        isMediaHubPresented = false
+                        print("📱 MediaHub closed")
+                    },
+                    onSelectEffect: { filter in
+                        // Применяем выбранный фильтр
+                        shaderManager.selectShader(by: filter.shaderName)
+                        print("🎨 Selected filter: \(filter.name), shader: \(filter.shaderName), needsDepth: \(filter.needsDepth)")
                     }
                 )
             }

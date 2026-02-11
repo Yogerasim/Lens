@@ -9,6 +9,8 @@ enum ShaderType: String, CaseIterable {
     case techLines = "Tech Lines"
     case acidTrip = "Acid Trip"
     case neuralPainter = "Neural Painter"
+    case depthFog = "Depth Fog"
+    case depthOutline = "Depth Outline"
     
     var fragmentFunctionName: String {
         switch self {
@@ -16,6 +18,8 @@ enum ShaderType: String, CaseIterable {
         case .techLines: return "fragment_techlines"
         case .acidTrip: return "fragment_acidtrip"
         case .neuralPainter: return "fragment_neuralpainter"
+        case .depthFog: return "fragment_depthfog"
+        case .depthOutline: return "fragment_depthoutline"
         }
     }
     
@@ -25,6 +29,8 @@ enum ShaderType: String, CaseIterable {
         case .techLines: return "line.3.crossed.swirl.circle.fill"
         case .acidTrip: return "sparkles"
         case .neuralPainter: return "brain.head.profile"
+        case .depthFog: return "cloud.fog.fill"
+        case .depthOutline: return "cube.transparent"
         }
     }
 }
@@ -36,6 +42,7 @@ struct ShaderUniforms {
     var textureAspect: Float
     var rotation: Float      // поворот в радианах (0, π/2, π, 3π/2)
     var mirror: Float        // зеркалирование (0.0 или 1.0)
+    var hasDepth: Float      // есть ли depth данные (0.0 или 1.0)
 }
 
 // MARK: - Shader Manager
@@ -86,6 +93,21 @@ final class ShaderManager: ObservableObject {
         print("🎨 Switched to: \(currentShader.rawValue)")
     }
     
+    /// Выбрать шейдер по имени fragment функции
+    func selectShader(by fragmentFunctionName: String) {
+        let allShaders = ShaderType.allCases
+        if let index = allShaders.firstIndex(where: { $0.fragmentFunctionName == fragmentFunctionName }) {
+            let previousShader = currentShader
+            currentIndex = index
+            currentShader = allShaders[index]
+            print("🎨 ShaderManager: Switched from \(previousShader.rawValue) → \(currentShader.rawValue)")
+            print("   📍 Fragment function: \(fragmentFunctionName)")
+        } else {
+            print("⚠️ ShaderManager: Shader not found for function: \(fragmentFunctionName)")
+            print("   📋 Available shaders: \(allShaders.map { $0.fragmentFunctionName })")
+        }
+    }
+    
     /// Сбросить время анимации
     func resetAnimationTime() {
         startTime = CACurrentMediaTime()
@@ -113,4 +135,5 @@ final class ShaderManager: ObservableObject {
             }
         }
     }
+    
 }

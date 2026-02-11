@@ -230,13 +230,15 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Internal helpers
     private func switchToDevice(type: AVCaptureDevice.DeviceType, position: AVCaptureDevice.Position) {
+        print("📸 CameraManager: Switching to \(type) at \(position == .back ? "BACK" : "FRONT")")
+        
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInUltraWideCamera, .builtInWideAngleCamera, .builtInTelephotoCamera],
             mediaType: .video,
             position: position
         )
         guard let device = discovery.devices.first(where: { $0.deviceType == type }) ?? discovery.devices.first else {
-            print("❌ No device for type: \(type) position: \(position)")
+            print("❌ CameraManager: No device for type: \(type) position: \(position)")
             return
         }
         do {
@@ -244,6 +246,7 @@ final class CameraManager: NSObject, ObservableObject {
             session.beginConfiguration()
             
             // Удаляем depth output если меняем камеру
+            print("🔴 CameraManager: Removing depth output before switch")
             DepthManager.shared.removeDepthOutput(from: session)
             
             if let currentInput = self.currentInput {
@@ -272,12 +275,16 @@ final class CameraManager: NSObject, ObservableObject {
             
             // LiDAR только на back camera с wide (x1)
             if position == .back && type == .builtInWideAngleCamera {
+                print("🟢 CameraManager: Enabling LiDAR depth (back x1)")
                 self.configureDepthFormat(for: device)
+            } else {
+                print("⚪ CameraManager: LiDAR disabled for this mode")
             }
             
             session.commitConfiguration()
             
             self.updateZoomLimits(for: device)
+            print("✅ CameraManager: Switched to \(device.localizedName)")
             self.setZoom(1.0) // Сбросить на оптический базовый зум
             
         } catch {

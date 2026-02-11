@@ -2,16 +2,16 @@ import SwiftUI
 
 struct EffectsLibraryView: View {
 
-    @EnvironmentObject private var store: AppMediaStore
-    let onSelect: (EffectItem) -> Void
+    @ObservedObject private var library = FilterLibrary.shared
+    let onSelect: (FilterDefinition) -> Void
 
     var body: some View {
         List {
-            ForEach(store.effects) { effect in
+            ForEach(library.filters) { filter in
                 Button {
-                    onSelect(effect)
+                    onSelect(filter)
                 } label: {
-                    EffectRow(effect: effect)
+                    EffectRow(filter: filter)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(DesignSystem.Colors.background)
@@ -24,7 +24,7 @@ struct EffectsLibraryView: View {
 }
 
 private struct EffectRow: View {
-    let effect: EffectItem
+    let filter: FilterDefinition
 
     var body: some View {
         HStack(spacing: 12) {
@@ -32,17 +32,17 @@ private struct EffectRow: View {
                 .fill(DesignSystem.Colors.lightGray.opacity(0.25))
                 .frame(width: 52, height: 52)
                 .overlay(
-                    Image(systemName: "sparkles")
+                    Image(systemName: filter.needsDepth ? "cube.transparent" : "sparkles")
                         .foregroundStyle(DesignSystem.Colors.blueUniversal)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(effect.title)
+                Text(filter.name)
                     .font(DesignSystem.Fonts.semibold17)
                     .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-                if let subtitle = effect.subtitle {
-                    Text(subtitle)
+                
+                if filter.needsDepth {
+                    Text("Использует LiDAR")
                         .font(DesignSystem.Fonts.regular12)
                         .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.65))
                 }
