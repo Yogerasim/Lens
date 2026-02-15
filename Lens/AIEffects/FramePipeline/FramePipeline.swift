@@ -5,8 +5,6 @@ internal import AVFoundation
 final class FramePipeline: ObservableObject {
 
     static let shared = FramePipeline()
-    
-    
 
     // Используем динамический FPS на основе устройства
     let gate = FrameGate()  // внутри берёт DeviceCapabilities.current.maxFPS
@@ -17,12 +15,30 @@ final class FramePipeline: ObservableObject {
     
     /// Флаг для UI: depth режим активен (фронтальная камера недоступна)
     @Published private(set) var isDepthModeActive: Bool = false
+    
+    // MARK: - Recording State
+    /// Флаг записи — блокирует изменение конфигурации камеры/depth
+    @Published var isRecording: Bool = false
+    
+    /// Hold-last depth buffer для стабильной записи
+    /// Хранит последний полученный depth, чтобы не дёргать hasDepth
+    private var recordingDepthBuffer: CVPixelBuffer?
+    
+    /// Стабильный hasDepth флаг для записи (не меняется во время записи)
+    private var recordingHasDepth: Bool = false
 
     /// Текущий активный фильтр (меняется из UI)
     var activeFilter: FilterDefinition? = FilterLibrary.shared.filters.first {
         didSet {
             if let filter = activeFilter {
                 print("🎬 FramePipeline: activeFilter -> \(filter.name), needsDepth=\(filter.needsDepth)")
+                
+                // ⛔️ Блокируем изменение depth policy во время записи
+                if isRecording {
+                    print("⛔️ Ignored depth reconfigure during recording - only shader change allowed")
+                    // Обновляем только шейдер, но не конфигурацию камеры
+                    return
+                }
                 
                 // Вызываем централизованный метод управления depth в CameraManager
                 guard let camera = cameraManager else {
@@ -48,6 +64,30 @@ final class FramePipeline: ObservableObject {
             }
         }
     }
+    
+    // MARK: - Recording Control
+    
+    /// Начать запись — фиксирует текущее состояние depth
+    func startRecording() {
+        isRecording = true
+        recordingHasDepth = activeFilter?.needsDepth == true && cameraManager?.isDepthEnabled == true
+        recordingDepthBuffer = DepthManager.shared.latestDepthPixelBuffer
+        print("🎬 FramePipeline: Recording started, hasDepth=\(recordingHasDepth)")
+    }
+    
+    /// Остановить запись
+    func stopRecording() {
+        isRecording = false
+        recordingDepthBuffer = nil
+        print("🎬 FramePipeline: Recording stopped")
+    }
+    
+    /// Обновить hold-last depth buffer (вызывается из DepthManager)
+    func updateRecordingDepthBuffer(_ depthBuffer: CVPixelBuffer) {
+        if isRecording && recordingHasDepth {
+            recordingDepthBuffer = depthBuffer
+        }
+    }
 
     var renderer: RenderEngine?
 
@@ -57,12 +97,28 @@ final class FramePipeline: ObservableObject {
         mlEngine.onResult = { [weak self] pixelBuffer, time in
             guard let self else { return }
 
-            // Берём depth только если фильтр его требует И depth активен
+            // Берём depth buffer
             let depthBuffer: CVPixelBuffer?
-            if self.activeFilter?.needsDepth == true && DepthManager.shared.isActive {
-                depthBuffer = DepthManager.shared.latestDepthPixelBuffer
+            let hasDepthFlag: Bool
+            
+            if self.isRecording {
+                // ✅ FIX: Во время записи используем стабильный hasDepth и hold-last depth
+                hasDepthFlag = self.recordingHasDepth
+                if hasDepthFlag {
+                    // Используем последний известный depth (hold-last)
+                    depthBuffer = self.recordingDepthBuffer ?? DepthManager.shared.latestDepthPixelBuffer
+                } else {
+                    depthBuffer = nil
+                }
             } else {
-                depthBuffer = nil
+                // Обычный режим превью
+                if self.activeFilter?.needsDepth == true && DepthManager.shared.isActive {
+                    depthBuffer = DepthManager.shared.latestDepthPixelBuffer
+                    hasDepthFlag = depthBuffer != nil
+                } else {
+                    depthBuffer = nil
+                    hasDepthFlag = false
+                }
             }
 
             let packet = FramePacket(

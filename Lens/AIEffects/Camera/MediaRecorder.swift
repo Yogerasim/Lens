@@ -9,6 +9,29 @@ enum CaptureMode: String, CaseIterable {
     case video = "ВИДЕО"
 }
 
+// MARK: - Recording Clock (монотонные timestamps для стабильной записи)
+final class RecordingClock {
+    let targetFPS: Int32 = 30
+    lazy var frameDuration = CMTime(value: 1, timescale: targetFPS)
+    
+    private var frameIndex: Int64 = 0
+    
+    /// Сбросить счётчик при старте записи
+    func reset() {
+        frameIndex = 0
+    }
+    
+    /// Получить следующий presentation time (монотонный)
+    func nextPresentationTime() -> CMTime {
+        let pts = CMTime(value: frameIndex, timescale: targetFPS)
+        frameIndex += 1
+        return pts
+    }
+    
+    /// Текущий индекс кадра
+    var currentFrameIndex: Int64 { frameIndex }
+}
+
 // MARK: - Video Recorder
 final class MediaRecorder: NSObject, ObservableObject {
     
@@ -17,11 +40,19 @@ final class MediaRecorder: NSObject, ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var captureMode: CaptureMode = .video
     
+    // MARK: - Recording Clock
+    private let recordingClock = RecordingClock()
+    
     // MARK: - Private - Video
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
     private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    
+    // MARK: - Recording PixelBuffer Pool (фиксированный размер на всё время записи)
+    private var recordingPixelBufferPool: CVPixelBufferPool?
+    private var recordingWidth: Int = 0
+    private var recordingHeight: Int = 0
     
     // MARK: - Private - State
     private var videoURL: URL?
@@ -79,7 +110,7 @@ final class MediaRecorder: NSObject, ObservableObject {
     }
     
     /// Записать видео кадр (обработанный с шейдером)
-    func appendVideoFrame(_ pixelBuffer: CVPixelBuffer, at time: CMTime) {
+    func appendVideoFrame(_ pixelBuffer: CVPixelBuffer, at time: CMTime, hasDepth: Bool = false, depthAvailable: Bool = false) {
         // Сохраняем для фото
         lastRenderedBuffer = pixelBuffer
         
@@ -95,19 +126,31 @@ final class MediaRecorder: NSObject, ObservableObject {
             // Инициализируем сессию при первом кадре
             if !self.sessionStarted {
                 self.startTime = time
+                self.recordingClock.reset()
                 writer.startSession(atSourceTime: .zero)
                 self.sessionStarted = true
-                print("✅ Recording session started")
+                print("✅ Recording session started at writerFPS=\(self.recordingClock.targetFPS)")
             }
             
-            guard let start = self.startTime else { return }
-            let presentationTime = CMTimeSubtract(time, start)
+            // ✅ FIX: Используем монотонный RecordingClock вместо timestamps камеры
+            let writerPTS = self.recordingClock.nextPresentationTime()
+            let frameIndex = self.recordingClock.currentFrameIndex
             
-            // Проверяем что время идёт вперёд
-            if presentationTime > self.lastVideoTime || self.lastVideoTime == .zero {
-                if adaptor.append(pixelBuffer, withPresentationTime: presentationTime) {
-                    self.lastVideoTime = presentationTime
-                }
+            // Проверяем размеры буфера
+            let bufferW = CVPixelBufferGetWidth(pixelBuffer)
+            let bufferH = CVPixelBufferGetHeight(pixelBuffer)
+            
+            // Диагностика на каждый writer append
+            if frameIndex % 30 == 0 { // Каждую секунду (30 fps)
+                print("🎞️ writer frame=\(frameIndex) pts=\(String(format: "%.3f", writerPTS.seconds))s hasDepth=\(hasDepth) depthAvailable=\(depthAvailable)")
+                print("   📐 RGB buffer: \(bufferW)x\(bufferH)")
+            }
+            
+            // Записываем кадр с монотонным timestamp
+            if adaptor.append(pixelBuffer, withPresentationTime: writerPTS) {
+                self.lastVideoTime = writerPTS
+            } else {
+                print("❌ Failed to append video frame \(frameIndex)")
             }
         }
     }

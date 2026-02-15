@@ -16,7 +16,8 @@ final class MetalRenderer: RenderEngine {
     let metalLayer: CAMetalLayer
     
     /// Callback для получения обработанного кадра (с шейдером)
-    var onRenderedFrame: ((CVPixelBuffer) -> Void)?
+    /// Параметры: pixelBuffer, hasDepth (стабильный флаг), depthAvailable (есть ли depth в этом кадре)
+    var onRenderedFrame: ((CVPixelBuffer, Bool, Bool) -> Void)?
     
     /// Ссылка на CameraManager для получения информации о камере
     weak var cameraManager: CameraManager?
@@ -32,6 +33,12 @@ final class MetalRenderer: RenderEngine {
     
     // Для захвата кадров
     private var outputPixelBufferPool: CVPixelBufferPool?
+    
+    // Hold-last depth texture для стабильной записи
+    private var lastDepthTexture: MTLTexture?
+    
+    // Стабильный hasDepth флаг (не дёргается во время записи)
+    private var stableHasDepth: Bool = false
     
     // Fallback depth текстура (1x1 черная) для шейдеров когда depth недоступен
     private lazy var placeholderDepthTexture: MTLTexture = {
@@ -114,16 +121,27 @@ final class MetalRenderer: RenderEngine {
             let inputTexture = makeTexture(from: pixelBuffer)
         else { return }
         
-        // Создаём depth текстуру или используем placeholder
+        // Создаём depth текстуру или используем placeholder/hold-last
         let depthTexture: MTLTexture
         let hasDepth: Float
+        let depthAvailable: Bool
+        
         if let depthBuffer = depthPixelBuffer,
            let dTex = makeDepthTexture(from: depthBuffer) {
+            // Есть свежий depth
             depthTexture = dTex
+            lastDepthTexture = dTex  // Сохраняем для hold-last
             hasDepth = 1.0
+            depthAvailable = true
+        } else if let lastTex = lastDepthTexture, cameraManager?.isDepthEnabled == true {
+            // ✅ FIX: Используем hold-last depth texture (не дёргаем hasDepth)
+            depthTexture = lastTex
+            hasDepth = 1.0
+            depthAvailable = false  // Свежий depth не пришёл, используем предыдущий
         } else {
             depthTexture = placeholderDepthTexture
             hasDepth = 0.0
+            depthAvailable = false
         }
         
         // Получаем размеры drawable (размер экрана)
@@ -230,13 +248,17 @@ final class MetalRenderer: RenderEngine {
             capturedBuffer = captureRenderedFrame(from: drawable.texture)
         }
         
+        // Сохраняем флаги для callback
+        let hasDepthBool = hasDepth > 0.5
+        let depthAvailableCopy = depthAvailable
+        
         commandBuffer.present(drawable)
         
         // Отправляем захваченный кадр после завершения GPU работы
         if let buffer = capturedBuffer {
             let callback = onRenderedFrame
             commandBuffer.addCompletedHandler { _ in
-                callback?(buffer)
+                callback?(buffer, hasDepthBool, depthAvailableCopy)
             }
         }
         

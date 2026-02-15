@@ -48,10 +48,10 @@ struct ContentView: View {
         FramePipeline.shared.cameraManager = cameraManager  // Для управления depth
         renderer.cameraManager = cameraManager
 
-        renderer.onRenderedFrame = { renderedBuffer in
+        renderer.onRenderedFrame = { renderedBuffer, hasDepth, depthAvailable in
             if mediaRecorder.isRecording {
                 let time = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
-                mediaRecorder.appendVideoFrame(renderedBuffer, at: time)
+                mediaRecorder.appendVideoFrame(renderedBuffer, at: time, hasDepth: hasDepth, depthAvailable: depthAvailable)
             } else {
                 mediaRecorder.setLastRenderedFrame(renderedBuffer)
             }

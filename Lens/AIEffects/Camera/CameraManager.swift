@@ -224,6 +224,12 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Switch Camera
     func switchCamera() {
+        // ⛔️ Блокируем переключение камеры во время записи
+        if FramePipeline.shared.isRecording {
+            print("⛔️ CameraManager: Camera switch blocked during recording")
+            return
+        }
+        
         // Блокируем переключение на фронтальную камеру в depth режиме
         if isDepthEnabled && currentPosition == .back {
             print("🚫 CameraManager: Front camera blocked in depth mode")
@@ -595,6 +601,12 @@ extension CameraManager {
     /// Централизованный метод управления depth политикой
     func applyDepthPolicy(needsDepth: Bool, reason: String) {
         print("🎯 CameraManager: applyDepthPolicy(needsDepth: \(needsDepth)) - \(reason)")
+        
+        // ⛔️ Блокируем изменение depth policy во время записи
+        if FramePipeline.shared.isRecording {
+            print("⛔️ CameraManager: Depth policy change blocked during recording")
+            return
+        }
         
         // Depth работает только на back camera
         let canUseDepth = currentPosition == .back
