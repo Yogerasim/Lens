@@ -279,20 +279,22 @@ final class CameraManager: NSObject, ObservableObject {
             return
         }
         
-        do {
-            // Обновляем позицию камеры
+        // ✅ FIX: Обновляем @Published свойства на main thread
+        DispatchQueue.main.async {
             self.currentPosition = position
-            if position == .back {
-                self.currentBackDeviceType = device.deviceType
-            }
-            
-            // Логируем обновление rotation
-            let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
-            print("🧭 CameraManager: rotation updated = \(newRotation) (\(Int(newRotation * 180 / .pi))°), mirrored=\(position == .front)")
-            
-            // Определяем нужен ли depth для текущего фильтра
-            let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
-            let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
+        }
+        
+        if position == .back {
+            self.currentBackDeviceType = device.deviceType
+        }
+        
+        // Логируем обновление rotation
+        let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
+        print("🧭 CameraManager: rotation updated = \(newRotation) (\(Int(newRotation * 180 / .pi))°), mirrored=\(position == .front)")
+        
+        // Определяем нужен ли depth для текущего фильтра
+        let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
+        let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
             
             if enableDepth {
                 print("🟢 CameraManager: Enabling depth (back x1 + depth filter)")
@@ -300,26 +302,22 @@ final class CameraManager: NSObject, ObservableObject {
                 print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
             }
             
-            // Используем универсальный метод конфигурации
-            // (он сам управляет beginConfiguration/commitConfiguration)
-            session.beginConfiguration()
-            
-            // Удаляем depth output если меняем камеру
-            print("🔴 CameraManager: Removing depth output before switch")
-            DepthManager.shared.removeDepthOutput(from: session)
-            
-            // Настраиваем новую камеру с правильными параметрами
-            configureCamera(device: device, enableDepth: enableDepth)
-            
-            session.commitConfiguration()
-            
-            updateZoomLimits(for: device)
-            print("✅ CameraManager: Switched to \(device.localizedName)")
-            setZoom(1.0) // Сбросить на оптический базовый зум
-            
-        } catch {
-            print("❌ switchToDevice error: \(error)")
-        }
+        // Используем универсальный метод конфигурации
+        // (он сам управляет beginConfiguration/commitConfiguration)
+        session.beginConfiguration()
+        
+        // Удаляем depth output если меняем камеру
+        print("🔴 CameraManager: Removing depth output before switch")
+        DepthManager.shared.removeDepthOutput(from: session)
+        
+        // Настраиваем новую камеру с правильными параметрами
+        configureCamera(device: device, enableDepth: enableDepth)
+        
+        session.commitConfiguration()
+        
+        updateZoomLimits(for: device)
+        print("✅ CameraManager: Switched to \(device.localizedName)")
+        setZoom(1.0) // Сбросить на оптический базовый зум
     }
     
     private func updateZoomLimits(for device: AVCaptureDevice) {
@@ -469,16 +467,12 @@ final class CameraManager: NSObject, ObservableObject {
     private func configureFormat(device: AVCaptureDevice, format: AVCaptureDevice.Format) {
         let targetFPS = Double(DeviceCapabilities.current.maxFPS)
         
-        // Ищем подходящий frame rate range
-        var bestFrameRateRange: AVFrameRateRange?
-        for range in format.videoSupportedFrameRateRanges {
-            if range.maxFrameRate >= targetFPS {
-                bestFrameRateRange = range
-                break
-            }
+        // Проверяем поддержку целевого FPS
+        let supportsTargetFPS = format.videoSupportedFrameRateRanges.contains { range in
+            range.maxFrameRate >= targetFPS
         }
         
-        guard let frameRateRange = bestFrameRateRange else {
+        guard supportsTargetFPS else {
             print("⚠️ CameraManager: Format doesn't support \(targetFPS) FPS")
             return
         }
@@ -543,7 +537,7 @@ final class CameraManager: NSObject, ObservableObject {
 }
 
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate & AVCaptureAudioDataOutputSampleBufferDelegate
-nonisolated extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
+extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
@@ -553,10 +547,12 @@ nonisolated extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegat
             // Video
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
             let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            onFrame?(pixelBuffer, time)
+            let callback = onFrame
+            callback?(pixelBuffer, time)
         } else if output == audioOutput {
             // Audio
-            onAudioSample?(sampleBuffer)
+            let callback = onAudioSample
+            callback?(sampleBuffer)
         }
     }
 }
@@ -746,29 +742,39 @@ extension CameraManager {
             return
         }
         
-        // Устанавливаем одинаковые параметры
-        let orientation: AVCaptureVideoOrientation = .portrait
         let shouldMirror = currentPosition == .front
         
         // Video connection
-        if videoConnection.isVideoOrientationSupported {
-            videoConnection.videoOrientation = orientation
+        if #available(iOS 17.0, *) {
+            if videoConnection.isVideoRotationAngleSupported(90) {
+                videoConnection.videoRotationAngle = 90 // Portrait
+            }
+        } else {
+            if videoConnection.isVideoOrientationSupported {
+                videoConnection.videoOrientation = .portrait
+            }
         }
         if videoConnection.isVideoMirroringSupported {
             videoConnection.isVideoMirrored = shouldMirror
         }
         
         // Depth connection
-        if depthConnection.isVideoOrientationSupported {
-            depthConnection.videoOrientation = orientation
+        if #available(iOS 17.0, *) {
+            if depthConnection.isVideoRotationAngleSupported(90) {
+                depthConnection.videoRotationAngle = 90 // Portrait
+            }
+        } else {
+            if depthConnection.isVideoOrientationSupported {
+                depthConnection.videoOrientation = .portrait
+            }
         }
         if depthConnection.isVideoMirroringSupported {
             depthConnection.isVideoMirrored = shouldMirror
         }
         
         print("📐 CameraManager: Synchronized orientation for video and depth")
-        print("   📹 Video - orientation: \(orientation.rawValue) (portrait), mirrored: \(shouldMirror)")
-        print("   📊 Depth - orientation: \(orientation.rawValue) (portrait), mirrored: \(shouldMirror)")
+        print("   📹 Video - orientation: portrait (90°), mirrored: \(shouldMirror)")
+        print("   📊 Depth - orientation: portrait (90°), mirrored: \(shouldMirror)")
     }
 }
 

@@ -256,7 +256,6 @@ fragment float4 fragment_acidtrip(
     
     float time = uniforms.time;
     float2 uv = in.uv;
-    float2 texSize = float2(tex.get_width(), tex.get_height());
     
     // --- 1. Волновые искажения UV (без вращения от центра) ---
     float2 warpedUV = uv;
