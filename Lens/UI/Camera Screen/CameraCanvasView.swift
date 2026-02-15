@@ -11,9 +11,14 @@ struct CameraCanvasView: View {
     @Binding var pinchStartZoom: CGFloat
     
     // MARK: - Intensity Gesture State
-    @State private var intensityStartValue: Float = 1.0
-    @State private var showIntensityIndicator: Bool = false
-    @State private var hideIntensityTimer: Timer?
+    /// Стартовое значение intensity (фиксируется один раз при начале жеста)
+    @State private var intensityGestureStartValue: Float = 1.0
+    /// Флаг что жест intensity активен
+    @State private var isIntensityGestureActive: Bool = false
+    /// Видимость HUD
+    @State private var isIntensityHUDVisible: Bool = false
+    /// Work item для скрытия HUD
+    @State private var hideHUDWorkItem: DispatchWorkItem?
 
     var body: some View {
         ZStack {
@@ -21,56 +26,23 @@ struct CameraCanvasView: View {
 
             MetalView(renderer: renderer)
                 .aspectRatio(9.0 / 16.0, contentMode: .fit)
-                .gesture(cameraGestures)
+                .gesture(combinedGestures)
             
-            // Intensity indicator (справа)
-            if showIntensityIndicator {
-                intensityIndicatorView
-                    .transition(.opacity)
+            // Glass Intensity HUD (справа)
+            HStack {
+                Spacer()
+                GlassIntensityHUD(
+                    value: framePipeline.smoothedIntensity,
+                    isVisible: isIntensityHUDVisible
+                )
+                .padding(.trailing, 16)
             }
-        }
-    }
-    
-    // MARK: - Intensity Indicator
-    private var intensityIndicatorView: some View {
-        HStack {
-            Spacer()
-            
-            VStack(spacing: 4) {
-                Text("🎚️")
-                    .font(.system(size: 16))
-                
-                ZStack(alignment: .bottom) {
-                    // Background track
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.white.opacity(0.3))
-                        .frame(width: 8, height: 120)
-                    
-                    // Fill
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(LinearGradient(
-                            colors: [.blue, .cyan],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        ))
-                        .frame(width: 8, height: CGFloat(framePipeline.effectIntensity) * 120)
-                }
-                
-                Text("\(Int(framePipeline.effectIntensity * 100))%")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.black.opacity(0.6))
-            )
-            .padding(.trailing, 16)
         }
     }
 
-    private var cameraGestures: some Gesture {
-        // Magnification (pinch to zoom)
+    // MARK: - Combined Gestures
+    private var combinedGestures: some Gesture {
+        // 1. Pinch to zoom
         MagnificationGesture()
             .onChanged { value in
                 if abs(value - 1.0) < 0.02 {
@@ -81,66 +53,92 @@ struct CameraCanvasView: View {
             .onEnded { _ in
                 pinchStartZoom = cameraManager.currentZoomFactor
             }
-            // Горизонтальный свайп для смены эффектов
-            .simultaneously(with:
-                DragGesture(minimumDistance: 50)
-                    .onEnded { value in
-                        // Проверяем что это горизонтальный свайп
-                        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-                        
-                        if isHorizontal {
-                            if value.translation.width < -50 {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    shaderManager.nextShader()
-                                }
-                            } else if value.translation.width > 50 {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    shaderManager.previousShader()
-                                }
-                            }
-                        }
+            // 2. Horizontal swipe для смены эффектов
+            .simultaneously(with: horizontalSwipeGesture)
+            // 3. Vertical drag для intensity
+            .simultaneously(with: verticalIntensityGesture)
+    }
+    
+    // MARK: - Horizontal Swipe (Effect Change)
+    private var horizontalSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 50)
+            .onEnded { value in
+                let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                
+                guard isHorizontal else { return }
+                
+                if value.translation.width < -50 {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        shaderManager.nextShader()
                     }
-            )
-            // Вертикальный свайп для intensity
-            .simultaneously(with:
-                DragGesture(minimumDistance: 20)
-                    .onChanged { value in
-                        // Проверяем что это вертикальный свайп
-                        let isVertical = abs(value.translation.height) > abs(value.translation.width)
-                        
-                        if isVertical {
-                            // При начале жеста запоминаем стартовое значение
-                            if abs(value.translation.height) < 30 {
-                                intensityStartValue = framePipeline.effectIntensity
-                                print("🖐️ Intensity gesture begin start=\(intensityStartValue)")
-                            }
-                            
-                            // Показываем индикатор
-                            withAnimation(.easeOut(duration: 0.15)) {
-                                showIntensityIndicator = true
-                            }
-                            hideIntensityTimer?.invalidate()
-                            
-                            // Вычисляем новое значение
-                            // Свайп вверх увеличивает, вниз уменьшает
-                            let sensitivity: Float = 0.003
-                            let deltaY = Float(value.translation.height)
-                            let newIntensity = max(0.0, min(1.0, intensityStartValue - deltaY * sensitivity))
-                            
-                            framePipeline.setEffectIntensity(newIntensity)
-                        }
+                } else if value.translation.width > 50 {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        shaderManager.previousShader()
                     }
-                    .onEnded { value in
-                        print("🖐️ Intensity end value=\(framePipeline.effectIntensity)")
-                        
-                        // Скрываем индикатор через 1.5 сек
-                        hideIntensityTimer?.invalidate()
-                        hideIntensityTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                showIntensityIndicator = false
-                            }
-                        }
-                    }
-            )
+                }
+            }
+    }
+    
+    // MARK: - Vertical Intensity Gesture
+    private var verticalIntensityGesture: some Gesture {
+        DragGesture(minimumDistance: 15)
+            .onChanged { value in
+                let isVertical = abs(value.translation.height) > abs(value.translation.width) * 1.2
+                
+                guard isVertical else { return }
+                
+                // ✅ FIX: Фиксируем стартовое значение ОДИН РАЗ при начале жеста
+                if !isIntensityGestureActive {
+                    isIntensityGestureActive = true
+                    intensityGestureStartValue = framePipeline.smoothedIntensity
+                    print("🖐️ Intensity gesture BEGIN start=\(String(format: "%.2f", intensityGestureStartValue))")
+                }
+                
+                // Показываем HUD
+                showIntensityHUD()
+                
+                // ✅ FIX: Вычисляем новое значение относительно ФИКСИРОВАННОГО старта
+                let sensitivity: Float = 0.004
+                let deltaY = Float(value.translation.height)
+                // Свайп ВВЕРХ (deltaY < 0) увеличивает
+                // Свайп ВНИЗ (deltaY > 0) уменьшает
+                let newIntensity = intensityGestureStartValue - deltaY * sensitivity
+                
+                // Отправляем в FramePipeline (там будет smoothing)
+                framePipeline.setTargetIntensity(newIntensity, reason: "gesture")
+            }
+            .onEnded { _ in
+                isIntensityGestureActive = false
+                print("🖐️ Intensity gesture END value=\(String(format: "%.2f", framePipeline.smoothedIntensity))")
+                
+                // Скрываем HUD через 0.8 сек
+                scheduleHideHUD(delay: 0.8)
+            }
+    }
+    
+    // MARK: - HUD Visibility Control
+    
+    private func showIntensityHUD() {
+        // Отменяем предыдущий hide
+        hideHUDWorkItem?.cancel()
+        hideHUDWorkItem = nil
+        
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+            isIntensityHUDVisible = true
+        }
+    }
+    
+    private func scheduleHideHUD(delay: TimeInterval) {
+        hideHUDWorkItem?.cancel()
+        
+        let workItem = DispatchWorkItem { [self] in
+            withAnimation(.easeOut(duration: 0.25)) {
+                isIntensityHUDVisible = false
+            }
+        }
+        
+        hideHUDWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 }
+

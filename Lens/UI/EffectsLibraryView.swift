@@ -67,10 +67,18 @@ private struct EffectRow: View {
                     .font(DesignSystem.Fonts.semibold17)
                     .foregroundStyle(DesignSystem.Colors.textPrimary)
                 
-                if filter.needsDepth {
-                    Text("Использует LiDAR")
-                        .font(DesignSystem.Fonts.regular12)
-                        .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.65))
+                HStack(spacing: 8) {
+                    if filter.needsDepth {
+                        Label("LiDAR", systemImage: "sensor.tag.radiowaves.forward")
+                            .font(DesignSystem.Fonts.regular12)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.65))
+                    }
+                    
+                    if filter.supportsIntensity {
+                        Label("Intensity", systemImage: "slider.horizontal.3")
+                            .font(DesignSystem.Fonts.regular12)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.5))
+                    }
                 }
             }
 

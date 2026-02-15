@@ -38,13 +38,27 @@ final class FramePipeline: ObservableObject {
     /// Стабильный hasDepth флаг для записи (не меняется во время записи)
     private var recordingHasDepth: Bool = false
     
-    // MARK: - Effect Intensity
-    /// Сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
-    @Published var effectIntensity: Float = 1.0
+    // MARK: - Effect Intensity (Smoothed)
+    /// Целевая сила эффекта (мгновенная цель из жеста)
+    @Published private(set) var targetIntensity: Float = 1.0
+    
+    /// Сглаженная сила эффекта (реально идёт в Metal и UI)
+    @Published private(set) var smoothedIntensity: Float = 1.0
+    
+    /// Коэффициент сглаживания (0.1-0.2 = плавно, 0.5+ = быстро)
+    private let smoothingAlpha: Float = 0.15
+    
+    /// DisplayLink для плавного обновления intensity
+    private var displayLink: CADisplayLink?
     
     /// Throttle для логов intensity
     private var lastIntensityLogTime: CFTimeInterval = 0
     private let intensityLogInterval: CFTimeInterval = 0.1
+    
+    /// Поддерживает ли текущий фильтр intensity
+    var currentFilterSupportsIntensity: Bool {
+        activeFilter?.supportsIntensity ?? true
+    }
 
     /// Текущий активный фильтр (меняется из UI)
     var activeFilter: FilterDefinition? = FilterLibrary.shared.filters.first {
@@ -78,6 +92,7 @@ final class FramePipeline: ObservableObject {
             }
             
             print("🎬 FramePipeline: activeFilter -> \(filter.name), needsDepth=\(filter.needsDepth)")
+            print("🎛️ Filter '\(filter.name)' needsDepth=\(filter.needsDepth) supportsIntensity=\(filter.supportsIntensity)")
             
             // ⛔️ Блокируем изменение depth policy во время записи
             if isRecording {
@@ -112,17 +127,63 @@ final class FramePipeline: ObservableObject {
     
     // MARK: - Effect Intensity Control
     
-    /// Обновить intensity с throttled логами
-    func setEffectIntensity(_ value: Float) {
+    /// Установить целевую intensity (жест вызывает этот метод)
+    func setTargetIntensity(_ value: Float, reason: String = "") {
         let clamped = max(0.0, min(1.0, value))
-        effectIntensity = clamped
+        targetIntensity = clamped
+        
+        // Запускаем smoothing если ещё не запущен
+        startSmoothingLoopIfNeeded()
+    }
+    
+    /// Запускает DisplayLink для плавного обновления
+    private func startSmoothingLoopIfNeeded() {
+        guard displayLink == nil else { return }
+        
+        displayLink = CADisplayLink(target: self, selector: #selector(updateSmoothedIntensity))
+        displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120)
+        displayLink?.add(to: .main, forMode: .common)
+    }
+    
+    /// Останавливает DisplayLink когда intensity стабилизировалась
+    private func stopSmoothingLoop() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+    
+    /// Вызывается на каждом кадре DisplayLink
+    @objc private func updateSmoothedIntensity() {
+        let diff = targetIntensity - smoothedIntensity
+        
+        // Если достаточно близко — останавливаем
+        if abs(diff) < 0.001 {
+            smoothedIntensity = targetIntensity
+            stopSmoothingLoop()
+            return
+        }
+        
+        // Плавное приближение к цели
+        smoothedIntensity += diff * smoothingAlpha
         
         // Throttled logging
         let now = CACurrentMediaTime()
         if now - lastIntensityLogTime > intensityLogInterval {
             lastIntensityLogTime = now
-            print("🎚️ intensity = \(String(format: "%.2f", clamped))")
+            print("🎚️ target=\(String(format: "%.2f", targetIntensity)) smooth=\(String(format: "%.2f", smoothedIntensity))")
         }
+    }
+    
+    /// Устаревший метод для совместимости (перенаправляет на setTargetIntensity)
+    func setEffectIntensity(_ value: Float) {
+        setTargetIntensity(value, reason: "legacy call")
+    }
+    
+    /// Intensity для Metal (учитывает supportsIntensity фильтра)
+    var effectIntensityForMetal: Float {
+        guard currentFilterSupportsIntensity else {
+            return 1.0 // Если фильтр не поддерживает — всегда полный эффект
+        }
+        return smoothedIntensity
     }
     
     // MARK: - Recording Control

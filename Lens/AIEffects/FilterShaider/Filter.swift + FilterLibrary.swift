@@ -13,12 +13,14 @@ struct FilterDefinition: Identifiable, Codable, Hashable {
     let name: String
     let shaderName: String
     let needsDepth: Bool
+    let supportsIntensity: Bool
     
-    init(id: UUID = UUID(), name: String, shaderName: String, needsDepth: Bool = false) {
+    init(id: UUID = UUID(), name: String, shaderName: String, needsDepth: Bool = false, supportsIntensity: Bool = true) {
         self.id = id
         self.name = name
         self.shaderName = shaderName
         self.needsDepth = needsDepth
+        self.supportsIntensity = supportsIntensity
     }
 }
 

@@ -184,8 +184,8 @@ final class MetalRenderer: RenderEngine {
         let depthFlipX: Float = 0.0  // Обычно X не нужно флипать
         let depthFlipY: Float = isLiDARMode ? 1.0 : 0.0  // Флипаем Y в LiDAR режиме
         
-        // ✅ Effect intensity (0.0 = passthrough, 1.0 = full effect)
-        let intensity = FramePipeline.shared.effectIntensity
+        // ✅ Effect intensity (smoothed, 0.0 = passthrough, 1.0 = full effect)
+        let intensity = FramePipeline.shared.effectIntensityForMetal
 
         var uniforms = ShaderUniforms(
             time: shaderManager.animationTime,
