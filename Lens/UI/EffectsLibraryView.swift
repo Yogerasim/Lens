@@ -6,14 +6,33 @@ struct EffectsLibraryView: View {
     @ObservedObject private var framePipeline = FramePipeline.shared
     let onSelect: (FilterDefinition) -> Void
     
-    /// Доступные фильтры для текущей камеры
+    /// Доступные фильтры для текущей камеры и режима записи
     private var availableFilters: [FilterDefinition] {
         let isFront = framePipeline.cameraManager?.isFrontCamera ?? false
-        return library.availableFilters(isFront: isFront)
+        let isRecording = framePipeline.isRecording
+        let recordingFamily = framePipeline.recordingFilterFamily
+        
+        return library.availableFilters(
+            isFront: isFront,
+            recordingFamily: recordingFamily,
+            isRecording: isRecording
+        )
     }
 
     var body: some View {
         List {
+            // Показываем сообщение о блокировке при записи
+            if framePipeline.isRecording, let family = framePipeline.recordingFilterFamily {
+                HStack {
+                    Image(systemName: "record.circle.fill")
+                        .foregroundColor(.red)
+                    Text("Locked to \(family.rawValue) filters")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .listRowBackground(Color.clear)
+            }
+            
             ForEach(availableFilters) { filter in
                 Button {
                     onSelect(filter)

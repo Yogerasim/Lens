@@ -45,6 +45,7 @@ struct ShaderUniforms {
     var hasDepth: Float      // есть ли depth данные (0.0 или 1.0)
     var depthFlipX: Float    // 1.0 = flip X для depth UV, 0.0 = no flip
     var depthFlipY: Float    // 1.0 = flip Y для depth UV, 0.0 = no flip
+    var intensity: Float     // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
 }
 
 // MARK: - Shader Manager
@@ -80,10 +81,17 @@ final class ShaderManager: ObservableObject {
     }
     
     /// Переключить на следующий шейдер (свайп влево)
-    /// Пропускает depth фильтры если активна фронтальная камера
+    /// Пропускает недоступные фильтры (depth на фронталке, wrong family при записи)
     func nextShader() {
         let isFront = FramePipeline.shared.cameraManager?.isFrontCamera ?? false
-        let availableFilters = FilterLibrary.shared.availableFilters(isFront: isFront)
+        let isRecording = FramePipeline.shared.isRecording
+        let recordingFamily = FramePipeline.shared.recordingFilterFamily
+        
+        let availableFilters = FilterLibrary.shared.availableFilters(
+            isFront: isFront,
+            recordingFamily: recordingFamily,
+            isRecording: isRecording
+        )
         
         guard !availableFilters.isEmpty else { return }
         
@@ -100,7 +108,10 @@ final class ShaderManager: ObservableObject {
             currentIndex = shaderIndex
             currentShader = ShaderType.allCases[shaderIndex]
             print("🎨 Switched to: \(currentShader.rawValue)")
-            if isFront {
+            
+            if isRecording, let family = recordingFamily {
+                print("   🎥 Recording mode - locked to \(family.rawValue) filters")
+            } else if isFront {
                 print("   📱 Front camera - depth filters skipped")
             }
             
@@ -110,10 +121,17 @@ final class ShaderManager: ObservableObject {
     }
     
     /// Переключить на предыдущий шейдер (свайп вправо)
-    /// Пропускает depth фильтры если активна фронтальная камера
+    /// Пропускает недоступные фильтры (depth на фронталке, wrong family при записи)
     func previousShader() {
         let isFront = FramePipeline.shared.cameraManager?.isFrontCamera ?? false
-        let availableFilters = FilterLibrary.shared.availableFilters(isFront: isFront)
+        let isRecording = FramePipeline.shared.isRecording
+        let recordingFamily = FramePipeline.shared.recordingFilterFamily
+        
+        let availableFilters = FilterLibrary.shared.availableFilters(
+            isFront: isFront,
+            recordingFamily: recordingFamily,
+            isRecording: isRecording
+        )
         
         guard !availableFilters.isEmpty else { return }
         
@@ -130,7 +148,10 @@ final class ShaderManager: ObservableObject {
             currentIndex = shaderIndex
             currentShader = ShaderType.allCases[shaderIndex]
             print("🎨 Switched to: \(currentShader.rawValue)")
-            if isFront {
+            
+            if isRecording, let family = recordingFamily {
+                print("   🎥 Recording mode - locked to \(family.rawValue) filters")
+            } else if isFront {
                 print("   📱 Front camera - depth filters skipped")
             }
             

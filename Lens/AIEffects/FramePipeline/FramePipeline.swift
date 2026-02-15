@@ -1,6 +1,13 @@
 import CoreMedia
 import Combine
+import QuartzCore
 internal import AVFoundation
+
+// MARK: - Filter Family (для блокировки при записи)
+enum FilterFamily: String {
+    case depth = "DEPTH"
+    case nonDepth = "NON-DEPTH"
+}
 
 final class FramePipeline: ObservableObject {
 
@@ -20,12 +27,24 @@ final class FramePipeline: ObservableObject {
     /// Флаг записи — блокирует изменение конфигурации камеры/depth
     @Published var isRecording: Bool = false
     
+    /// Семейство фильтров, заблокированное при записи
+    /// Устанавливается в момент startRecording
+    private(set) var recordingFilterFamily: FilterFamily? = nil
+    
     /// Hold-last depth buffer для стабильной записи
     /// Хранит последний полученный depth, чтобы не дёргать hasDepth
     private var recordingDepthBuffer: CVPixelBuffer?
     
     /// Стабильный hasDepth флаг для записи (не меняется во время записи)
     private var recordingHasDepth: Bool = false
+    
+    // MARK: - Effect Intensity
+    /// Сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
+    @Published var effectIntensity: Float = 1.0
+    
+    /// Throttle для логов intensity
+    private var lastIntensityLogTime: CFTimeInterval = 0
+    private let intensityLogInterval: CFTimeInterval = 0.1
 
     /// Текущий активный фильтр (меняется из UI)
     var activeFilter: FilterDefinition? = FilterLibrary.shared.filters.first {
@@ -40,6 +59,21 @@ final class FramePipeline: ObservableObject {
                     print("⛔️ Depth filter '\(filter.name)' selected on front camera -> switching to '\(fallback.name)'")
                     activeFilter = fallback
                     return // didSet вызовется снова с правильным фильтром
+                }
+            }
+            
+            // ✅ FIX: Проверяем блокировку по семейству фильтров при записи
+            if isRecording, let family = recordingFilterFamily {
+                let filterFamily: FilterFamily = filter.needsDepth ? .depth : .nonDepth
+                if filterFamily != family {
+                    print("⛔️ Filter '\(filter.name)' blocked during recording (locked to \(family.rawValue) filters)")
+                    // Откатываемся на предыдущий допустимый фильтр
+                    if let fallback = FilterLibrary.shared.filters.first(where: { 
+                        ($0.needsDepth && family == .depth) || (!$0.needsDepth && family == .nonDepth)
+                    }) {
+                        activeFilter = fallback
+                    }
+                    return
                 }
             }
             
@@ -76,21 +110,42 @@ final class FramePipeline: ObservableObject {
         }
     }
     
+    // MARK: - Effect Intensity Control
+    
+    /// Обновить intensity с throttled логами
+    func setEffectIntensity(_ value: Float) {
+        let clamped = max(0.0, min(1.0, value))
+        effectIntensity = clamped
+        
+        // Throttled logging
+        let now = CACurrentMediaTime()
+        if now - lastIntensityLogTime > intensityLogInterval {
+            lastIntensityLogTime = now
+            print("🎚️ intensity = \(String(format: "%.2f", clamped))")
+        }
+    }
+    
     // MARK: - Recording Control
     
-    /// Начать запись — фиксирует текущее состояние depth
+    /// Начать запись — фиксирует текущее состояние depth и семейство фильтров
     func startRecording() {
         isRecording = true
         recordingHasDepth = activeFilter?.needsDepth == true && cameraManager?.isDepthEnabled == true
         recordingDepthBuffer = DepthManager.shared.latestDepthPixelBuffer
+        
+        // ✅ FIX: Устанавливаем семейство фильтров для блокировки
+        recordingFilterFamily = (activeFilter?.needsDepth == true) ? .depth : .nonDepth
+        
         print("🎬 FramePipeline: Recording started, hasDepth=\(recordingHasDepth)")
+        print("🎥 Recording locked to \(recordingFilterFamily?.rawValue ?? "UNKNOWN") filters")
     }
     
     /// Остановить запись
     func stopRecording() {
         isRecording = false
         recordingDepthBuffer = nil
-        print("🎬 FramePipeline: Recording stopped")
+        recordingFilterFamily = nil
+        print("🎬 FramePipeline: Recording stopped, filter lock released")
     }
     
     /// Обновить hold-last depth buffer (вызывается из DepthManager)

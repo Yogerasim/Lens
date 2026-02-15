@@ -183,6 +183,9 @@ final class MetalRenderer: RenderEngine {
         let isLiDARMode = cameraManager?.isDepthEnabled ?? false
         let depthFlipX: Float = 0.0  // Обычно X не нужно флипать
         let depthFlipY: Float = isLiDARMode ? 1.0 : 0.0  // Флипаем Y в LiDAR режиме
+        
+        // ✅ Effect intensity (0.0 = passthrough, 1.0 = full effect)
+        let intensity = FramePipeline.shared.effectIntensity
 
         var uniforms = ShaderUniforms(
             time: shaderManager.animationTime,
@@ -192,7 +195,8 @@ final class MetalRenderer: RenderEngine {
             mirror: mirror,
             hasDepth: hasDepth,
             depthFlipX: depthFlipX,
-            depthFlipY: depthFlipY
+            depthFlipY: depthFlipY,
+            intensity: intensity
         )
         
         // Диагностические принты с троттлингом (раз в 2 секунды)
@@ -205,6 +209,9 @@ final class MetalRenderer: RenderEngine {
             
             // Логируем depth flip флаги
             print("🧪 DepthFlip: depthFlipX=\(depthFlipX) depthFlipY=\(depthFlipY) isLiDARMode=\(isLiDARMode)")
+            
+            // Логируем intensity
+            print("🎚️ Effect intensity: \(String(format: "%.2f", intensity))")
             
             // Логируем размеры depth если есть
             if let depthBuffer = depthPixelBuffer {

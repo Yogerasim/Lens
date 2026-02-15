@@ -11,6 +11,7 @@ struct Uniforms {
     float hasDepth;    // есть ли depth данные (0.0 или 1.0)
     float depthFlipX;  // 1.0 = flip X для depth UV
     float depthFlipY;  // 1.0 = flip Y для depth UV
+    float intensity;   // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
 };
 
 // MARK: - Vertex Output
@@ -141,7 +142,11 @@ fragment float4 fragment_comic(
     // --- 7. Комбинируем ---
     float3 finalColor = mix(shifted, float3(0.0), edgeStrength);
     
-    return float4(finalColor, 1.0);
+    // --- 8. Apply intensity (mix с оригиналом) ---
+    float4 originalColor = tex.sample(s, uv);
+    float3 result = mix(originalColor.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -230,7 +235,10 @@ fragment float4 fragment_techlines(
     finalColor += float3(scanHighlight * 0.3, scanHighlight, scanHighlight * 0.8); // scan wave
     finalColor += float3(depth * 0.1, depth * 0.15, depth * 0.2); // subtle depth
     
-    return float4(finalColor, 1.0);
+    // --- 9. Apply intensity (mix с оригиналом) ---
+    float3 result = mix(color.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -325,7 +333,11 @@ fragment float4 fragment_acidtrip(
     float noise = fract(sin(dot(uv + time, float2(12.9898, 78.233))) * 43758.5453);
     color += (noise - 0.5) * 0.04;
     
-    return float4(color, 1.0);
+    // --- 9. Apply intensity (mix с оригиналом) ---
+    float4 originalColor = tex.sample(s, uv);
+    float3 result = mix(originalColor.rgb, color, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -470,7 +482,10 @@ fragment float4 fragment_neuralpainter(
     float finalLuma = dot(finalColor, float3(0.299, 0.587, 0.114));
     finalColor = mix(float3(finalLuma), finalColor, 1.25);
     
-    return float4(clamp(finalColor, 0.0, 1.0), 1.0);
+    // --- 10. Apply intensity (mix с оригиналом) ---
+    float3 result = mix(originalColor.rgb, clamp(finalColor, 0.0, 1.0), uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -553,7 +568,10 @@ fragment float4 fragment_depthfog(
         return float4(depthVis, depthVis * 0.5, 1.0 - depthVis, 1.0);
     }
     
-    return float4(finalColor, 1.0);
+    // --- 8. Apply intensity (mix с оригиналом) ---
+    float3 result = mix(color.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -624,6 +642,9 @@ fragment float4 fragment_depthoutline(
     // Добавляем немного оригинального цвета в близких объектах
     finalColor = mix(finalColor, color.rgb * 0.3, (1.0 - normalizedDepth) * 0.4);
     
-    return float4(finalColor, 1.0);
+    // --- Apply intensity (mix с оригиналом) ---
+    float3 result = mix(color.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
