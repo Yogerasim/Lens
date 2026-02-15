@@ -83,6 +83,9 @@ final class ShaderManager: ObservableObject {
         currentIndex = (currentIndex + 1) % allShaders.count
         currentShader = allShaders[currentIndex]
         print("🎨 Switched to: \(currentShader.rawValue)")
+        
+        // Обновляем depth политику в FramePipeline
+        FramePipeline.shared.setActiveFilter(by: currentShader.fragmentFunctionName)
     }
     
     /// Переключить на предыдущий шейдер (свайп вправо)
@@ -91,6 +94,9 @@ final class ShaderManager: ObservableObject {
         currentIndex = (currentIndex - 1 + allShaders.count) % allShaders.count
         currentShader = allShaders[currentIndex]
         print("🎨 Switched to: \(currentShader.rawValue)")
+        
+        // Обновляем depth политику в FramePipeline
+        FramePipeline.shared.setActiveFilter(by: currentShader.fragmentFunctionName)
     }
     
     /// Выбрать шейдер по имени fragment функции
@@ -102,6 +108,9 @@ final class ShaderManager: ObservableObject {
             currentShader = allShaders[index]
             print("🎨 ShaderManager: Switched from \(previousShader.rawValue) → \(currentShader.rawValue)")
             print("   📍 Fragment function: \(fragmentFunctionName)")
+            
+            // Обновляем depth политику в FramePipeline
+            FramePipeline.shared.setActiveFilter(by: fragmentFunctionName)
         } else {
             print("⚠️ ShaderManager: Shader not found for function: \(fragmentFunctionName)")
             print("   📋 Available shaders: \(allShaders.map { $0.fragmentFunctionName })")

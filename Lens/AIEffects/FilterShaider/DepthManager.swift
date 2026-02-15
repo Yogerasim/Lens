@@ -1,4 +1,4 @@
-import AVFoundation
+internal import AVFoundation
 import CoreVideo
 import CoreMedia
 
@@ -8,11 +8,14 @@ final class DepthManager: NSObject {
 
     private var depthOutput: AVCaptureDepthDataOutput?
     private let depthQueue = DispatchQueue(label: "depth.data.queue", qos: .userInitiated)
-    private var lastLogTime: CMTime = .invalid
-    private let logInterval = CMTime(seconds: 1.0, preferredTimescale: 600)
+    
+    
+
     /// Последняя depth map (CVPixelBuffer). Формат зависит от камеры (часто DepthFloat16 / Disparity).
-    private(set) var latestDepthPixelBuffer: CVPixelBuffer?
+    private(set) var latestDepthMap: CVPixelBuffer?
     private(set) var latestDepthTime: CMTime = .invalid
+    
+    private(set) var latestDepthPixelBuffer: CVPixelBuffer?
 
     /// Callback (если нужно)
     var onDepthMap: ((CVPixelBuffer, CMTime) -> Void)?
@@ -23,6 +26,10 @@ final class DepthManager: NSObject {
     private let targetDepthFPS: Double = 15
     private lazy var minDepthInterval = CMTime(seconds: 1.0 / targetDepthFPS, preferredTimescale: 600)
     private var lastDeliveredTime: CMTime = .invalid
+    
+    // Throttle logging
+    private var lastLogTime: CMTime = .invalid
+    private let logInterval = CMTime(seconds: 2.0, preferredTimescale: 600)
 
     private override init() {
         super.init()
@@ -35,10 +42,10 @@ final class DepthManager: NSObject {
         let output = AVCaptureDepthDataOutput()
         output.setDelegate(self, callbackQueue: depthQueue)
 
-        // ✅ FIX #2: discard late depth
+        // ✅ FIX #2: discard late
         output.alwaysDiscardsLateDepthData = true
 
-        // Filtering часто добавляет latency — для real-time лучше выключить
+        // (опционально) Filtering часто добавляет latency. Для real-time я бы выключил:
         output.isFilteringEnabled = false
 
         guard session.canAddOutput(output) else {
@@ -66,7 +73,7 @@ final class DepthManager: NSObject {
         session.removeOutput(out)
         depthOutput = nil
         isActive = false
-        latestDepthPixelBuffer = nil
+        latestDepthMap = nil
         latestDepthTime = .invalid
         lastDeliveredTime = .invalid
         print("🔵 DepthManager: Depth output removed")
@@ -87,31 +94,29 @@ extension DepthManager: AVCaptureDepthDataOutputDelegate {
         timestamp: CMTime,
         connection: AVCaptureConnection
     ) {
-        // ✅ FIX #3: throttle to 15fps
+        // Throttle to targetDepthFPS
         if lastDeliveredTime.isValid {
             let delta = CMTimeSubtract(timestamp, lastDeliveredTime)
             if delta < minDepthInterval { return }
         }
         lastDeliveredTime = timestamp
 
-        // ✅ FIX #1: NO conversion
+        // Получаем depth map без конвертации
         let depthMap = depthData.depthDataMap
 
+        latestDepthMap = depthMap
         latestDepthPixelBuffer = depthMap
         latestDepthTime = timestamp
 
-        let w = CVPixelBufferGetWidth(depthMap)
-        let h = CVPixelBufferGetHeight(depthMap)
-        print("📊 DepthManager: depth \(w)x\(h), ts: \(timestamp.seconds)")
-
-        onDepthMap?(depthMap, timestamp)
-        
+        // Логи троттлим отдельно
         if lastLogTime.isValid == false || CMTimeSubtract(timestamp, lastLogTime) > logInterval {
             lastLogTime = timestamp
             let w = CVPixelBufferGetWidth(depthMap)
             let h = CVPixelBufferGetHeight(depthMap)
-            print("📊 DepthManager: depth \(w)x\(h), ts: \(timestamp.seconds)")
+            print("📊 DepthManager: depth \(w)x\(h), ts: \(String(format: "%.2f", timestamp.seconds))")
         }
+
+        onDepthMap?(depthMap, timestamp)
     }
 
     func depthDataOutput(

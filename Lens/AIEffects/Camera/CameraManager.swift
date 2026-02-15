@@ -1,4 +1,4 @@
-import AVFoundation
+internal import AVFoundation
 import CoreVideo
 import Combine
 
@@ -34,6 +34,9 @@ final class CameraManager: NSObject, ObservableObject {
     /// Текущий зум фактор
     @Published var currentZoomFactor: CGFloat = 1.0
     
+    /// Статус depth (включён/выключен)
+    @Published var isDepthEnabled: Bool = false
+    
     /// Минимальный зум (динамически обновляется от устройства)
     private var minZoomFactor: CGFloat = 1.0
     
@@ -46,7 +49,7 @@ final class CameraManager: NSObject, ObservableObject {
     private let audioOutputQueue = DispatchQueue(label: "camera.audio.queue")
     nonisolated(unsafe) private let videoOutput = AVCaptureVideoDataOutput()
     nonisolated(unsafe) private let audioOutput = AVCaptureAudioDataOutput()
-    private var currentInput: AVCaptureDeviceInput?
+    private(set) var currentInput: AVCaptureDeviceInput?
     private var audioInput: AVCaptureDeviceInput?
     
     // Текущий тип камеры (для back)
@@ -66,24 +69,19 @@ final class CameraManager: NSObject, ObservableObject {
             // Используем inputPriority чтобы вручную выбирать формат с depth
             self.session.sessionPreset = .inputPriority
             
-            // Пробуем сначала LiDAR камеру для depth, иначе обычную широкоугольную
+            // При старте ВСЕГДА используем обычную Wide камеру
+            // LiDAR включается только когда выбран depth-фильтр через applyDepthPolicy
             var videoDevice: AVCaptureDevice?
             
-            // Попробуем LiDAR камеру (builtInLiDARDepthCamera)
-            if let lidarDevice = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: self.currentPosition) {
-                videoDevice = lidarDevice
-                print("✅ CameraManager: Using LiDAR depth camera")
-            } else {
-                // Fallback на обычную широкоугольную камеру
-                let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
-                let discovery = AVCaptureDevice.DiscoverySession(
-                    deviceTypes: desiredTypes,
-                    mediaType: .video,
-                    position: self.currentPosition
-                )
-                videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first
-                print("🔵 CameraManager: Using standard camera (no LiDAR)")
-            }
+            let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
+            let discovery = AVCaptureDevice.DiscoverySession(
+                deviceTypes: desiredTypes,
+                mediaType: .video,
+                position: self.currentPosition
+            )
+            videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first
+            print("🔵 CameraManager: Using standard Wide camera at startup")
+            print("   ℹ️ LiDAR will be enabled on demand when depth filter is selected")
             
             // Remove old inputs if any
             if let existing = self.currentInput {
@@ -100,6 +98,11 @@ final class CameraManager: NSObject, ObservableObject {
                         if self.currentPosition == .back {
                             self.currentBackDeviceType = device.deviceType
                         }
+                        
+                        // Принт информации о камере
+                        let depthSupported = device.activeFormat.supportedDepthDataFormats.count > 0
+                        print("📹 CameraManager: Current camera - \(device.deviceType.rawValue) (\(device.position == .back ? "back" : "front"))")
+                        print("   📊 Depth supported: \(depthSupported ? "YES" : "NO")")
                     }
                 } catch {
                     print("❌ Failed to create video input: \(error)")
@@ -155,15 +158,15 @@ final class CameraManager: NSObject, ObservableObject {
                 }
             }
             
-            // Update zoom limits and configure depth
+            // Update zoom limits and configure FPS (depth включается отдельно по запросу фильтра)
             if let device = self.currentInput?.device {
                 self.updateZoomLimits(for: device)
                 
-                // Configure format with depth support
-                self.configureDepthFormat(for: device)
-                
                 // Configure frame rate to max FPS
                 self.configureFrameRate(for: device)
+                
+                // НЕ включаем depth автоматически - он включится когда выберут depth-фильтр
+                print("🔵 CameraManager: Depth will be enabled on demand (when depth filter selected)")
             }
             
             self.session.commitConfiguration()
@@ -225,10 +228,61 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - Depth Control
+    func enableDepth() {
+        sessionQueue.async {
+            guard !DepthManager.shared.isActive else {
+                print("🔵 CameraManager: Depth already active")
+                return
+            }
+            
+            guard self.currentPosition == .back else {
+                print("⚠️ CameraManager: Depth only available on back camera")
+                return
+            }
+            
+            guard let device = self.currentInput?.device else { return }
+            
+            self.session.beginConfiguration()
+            self.configureDepthFormat(for: device)
+            self.session.commitConfiguration()
+            
+            print("✅ CameraManager: Depth enabled")
+        }
+    }
+    
+    func disableDepth() {
+        sessionQueue.async {
+            guard DepthManager.shared.isActive else {
+                print("🔵 CameraManager: Depth already inactive")
+                return
+            }
+            
+            self.session.beginConfiguration()
+            DepthManager.shared.removeDepthOutput(from: self.session)
+            self.session.commitConfiguration()
+            
+            print("✅ CameraManager: Depth disabled")
+        }
+    }
+    
     // MARK: - Switch Camera
     func switchCamera() {
+        // Блокируем переключение на фронтальную камеру в depth режиме
+        if isDepthEnabled && currentPosition == .back {
+            print("🚫 CameraManager: Front camera blocked in depth mode")
+            return
+        }
+        
         sessionQueue.async {
             let newPosition: AVCaptureDevice.Position = self.currentPosition == .back ? .front : .back
+            
+            // Дополнительная проверка на sessionQueue
+            if self.isDepthEnabled && newPosition == .front {
+                print("🚫 CameraManager: Front camera blocked in depth mode (sessionQueue)")
+                return
+            }
+            
             self.switchToDevice(type: .builtInWideAngleCamera, position: newPosition)
         }
     }
@@ -275,15 +329,20 @@ final class CameraManager: NSObject, ObservableObject {
                 }
             }
             
+            // Логируем обновление rotation
+            let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
+            print("🧭 CameraManager: rotation updated = \(newRotation) (\(Int(newRotation * 180 / .pi))°), mirrored=\(position == .front)")
+            
             // Настраиваем FPS для новой камеры
             self.configureFrameRate(for: device)
             
-            // LiDAR только на back camera с wide (x1)
-            if position == .back && type == .builtInWideAngleCamera {
-                print("🟢 CameraManager: Enabling LiDAR depth (back x1)")
+            // Depth включаем только если текущий фильтр его требует И это back camera x1
+            let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
+            if position == .back && type == .builtInWideAngleCamera && needsDepth {
+                print("🟢 CameraManager: Enabling LiDAR depth (back x1 + depth filter)")
                 self.configureDepthFormat(for: device)
             } else {
-                print("⚪ CameraManager: LiDAR disabled for this mode")
+                print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
             }
             
             session.commitConfiguration()
@@ -347,8 +406,7 @@ final class CameraManager: NSObject, ObservableObject {
                 let depthDim = CMVideoFormatDescriptionGetDimensions(depthFormat.formatDescription)
                 print("✅ CameraManager: Configured depth format - video: \(dim.width)x\(dim.height), depth: \(depthDim.width)x\(depthDim.height) at \(Int(targetFPS)) FPS")
                 
-                // Setup DepthManager
-                DepthManager.shared.setupDepthOutput(for: self.session)
+                // НЕ вызываем setupDepthOutput здесь - он уже вызван в setDepthEnabled
                 return
             } catch {
                 print("❌ CameraManager: Failed to configure depth format: \(error)")
@@ -451,6 +509,12 @@ extension CameraManager {
     }
     
     func zoom(to preset: ZoomPreset) {
+        // Блокируем зум если depth включён и пытаемся переключиться не на 1x
+        if isDepthEnabled && preset != .wide {
+            print("🚫 Zoom preset blocked because depth is enabled - only 1x allowed")
+            return
+        }
+        
         sessionQueue.async {
             // Подбираем оптимальную камеру под пресет
             switch preset {
@@ -482,6 +546,112 @@ extension CameraManager {
                     // На фронталке телекамеры нет — цифровой зум 2x
                     self.setZoom(2.0)
                 }
+            }
+        }
+    }
+    
+    // MARK: - Depth Management
+    /// Централизованный метод управления depth политикой
+    func applyDepthPolicy(needsDepth: Bool, reason: String) {
+        print("🎯 CameraManager: applyDepthPolicy(needsDepth: \(needsDepth)) - \(reason)")
+        
+        // Depth работает только на back camera
+        let canUseDepth = currentPosition == .back
+        
+        if needsDepth && canUseDepth {
+            print("🟢 CameraManager: Filter needs depth and we're on back camera")
+            setDepthEnabled(true, reason: reason)
+        } else if needsDepth && !canUseDepth {
+            print("❌ CameraManager: Filter needs depth but we're on front camera - depth disabled")
+            setDepthEnabled(false, reason: "Front camera doesn't support depth")
+        } else {
+            print("⚪️ CameraManager: Filter doesn't need depth - disabling")
+            setDepthEnabled(false, reason: reason)
+        }
+    }
+    
+    /// Включает/выключает depth динамически в зависимости от выбранного фильтра
+    private func setDepthEnabled(_ enabled: Bool, reason: String) {
+        print("🔵 CameraManager: setDepthEnabled(\(enabled)) - \(reason)")
+        
+        // Идемпотентность — если состояние не изменилось, ничего не делаем
+        guard enabled != isDepthEnabled else { 
+            print("   ↪️ Depth already \(enabled ? "enabled" : "disabled"), skipping")
+            return 
+        }
+        
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.session.beginConfiguration()
+            defer { self.session.commitConfiguration() }
+            
+            if enabled {
+                print("🟢 CameraManager: ENABLING depth - switching to LiDAR camera")
+                
+                // Переключаемся на LiDAR камеру
+                if let lidarDevice = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: .back) {
+                    // Удаляем текущий input
+                    if let existing = self.currentInput {
+                        self.session.removeInput(existing)
+                    }
+                    
+                    do {
+                        let input = try AVCaptureDeviceInput(device: lidarDevice)
+                        if self.session.canAddInput(input) {
+                            self.session.addInput(input)
+                            self.currentInput = input
+                            print("✅ CameraManager: Switched to LiDAR camera")
+                        }
+                    } catch {
+                        print("❌ CameraManager: Failed to switch to LiDAR: \(error)")
+                    }
+                    
+                    // Настраиваем depth output
+                    DepthManager.shared.setupDepthOutput(for: self.session)
+                    self.configureDepthFormat(for: lidarDevice)
+                } else {
+                    print("❌ CameraManager: LiDAR camera not available")
+                }
+                
+                print("✅ CameraManager: Depth ENABLED")
+            } else {
+                print("⚪️ CameraManager: DISABLING depth")
+                // Убираем depth output
+                DepthManager.shared.removeDepthOutput(from: self.session)
+                
+                // Переключаемся обратно на обычную Wide камеру
+                let discovery = AVCaptureDevice.DiscoverySession(
+                    deviceTypes: [.builtInWideAngleCamera],
+                    mediaType: .video,
+                    position: self.currentPosition
+                )
+                if let wideDevice = discovery.devices.first {
+                    // Удаляем текущий input
+                    if let existing = self.currentInput {
+                        self.session.removeInput(existing)
+                    }
+                    
+                    do {
+                        let input = try AVCaptureDeviceInput(device: wideDevice)
+                        if self.session.canAddInput(input) {
+                            self.session.addInput(input)
+                            self.currentInput = input
+                            self.configureFrameRate(for: wideDevice)
+                            print("✅ CameraManager: Switched back to Wide camera")
+                        }
+                    } catch {
+                        print("❌ CameraManager: Failed to switch to Wide: \(error)")
+                    }
+                }
+                
+                print("✅ CameraManager: Depth DISABLED")
+            }
+            
+            // Обновляем флаг на main thread
+            DispatchQueue.main.async {
+                self.isDepthEnabled = enabled
+                print("📱 CameraManager: UI updated - isDepthEnabled = \(enabled)")
             }
         }
     }

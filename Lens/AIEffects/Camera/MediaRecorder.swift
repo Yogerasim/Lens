@@ -1,4 +1,4 @@
-import AVFoundation
+internal import AVFoundation
 import Photos
 import UIKit
 import Combine

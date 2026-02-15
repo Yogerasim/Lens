@@ -6,7 +6,7 @@ struct ZoomPresetRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ForEach(ZoomPreset.allCases, id: \.self) { preset in
+            ForEach(availablePresets, id: \.self) { preset in
                 let isSelected = abs(cameraManager.currentZoomFactor - preset.rawValue) < 0.02
 
                 Button {
@@ -21,6 +21,19 @@ struct ZoomPresetRow: View {
                 }
                 .buttonStyle(.plain) // чтобы не ломать вид chip
             }
+        }
+    }
+    
+    /// Доступные зум пресеты в зависимости от состояния depth
+    private var availablePresets: [ZoomPreset] {
+        let depthMode = FramePipeline.shared.activeFilter?.needsDepth == true || cameraManager.isDepthEnabled
+        
+        if depthMode {
+            // Когда depth включён или фильтр требует depth — показываем только 1x (LiDAR работает только на wide)
+            return [.wide]
+        } else {
+            // Когда depth выключен — показываем все пресеты
+            return ZoomPreset.allCases
         }
     }
 }

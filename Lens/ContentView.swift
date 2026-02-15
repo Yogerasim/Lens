@@ -45,6 +45,7 @@ struct ContentView: View {
 
     private func setupRenderer() {
         FramePipeline.shared.renderer = renderer
+        FramePipeline.shared.cameraManager = cameraManager  // Для управления depth
         renderer.cameraManager = cameraManager
 
         renderer.onRenderedFrame = { renderedBuffer in

@@ -2,6 +2,7 @@ import Metal
 import QuartzCore
 import CoreVideo
 import CoreImage
+internal import AVFoundation
 
 protocol RenderEngine {
     
@@ -47,6 +48,10 @@ final class MetalRenderer: RenderEngine {
         tex.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, withBytes: &zero, bytesPerRow: 4)
         return tex
     }()
+    
+    // Для троттлинга диагностических принтов
+    private var lastDiagnosticPrintTime: CFTimeInterval = 0
+    private let diagnosticPrintInterval: CFTimeInterval = 2.0
 
     // MARK: - Init
     init(layer: CAMetalLayer) {
@@ -148,6 +153,20 @@ final class MetalRenderer: RenderEngine {
             mirror: mirror,
             hasDepth: hasDepth
         )
+        
+        // Диагностические принты с троттлингом
+        let now = CACurrentMediaTime()
+        if now - lastDiagnosticPrintTime > diagnosticPrintInterval {
+            lastDiagnosticPrintTime = now
+            let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
+            let isFront = cameraManager?.isFrontCamera ?? false
+            print("🔍 MetalRenderer diagnostic:")
+            print("   📐 inputTexture: \(Int(inputWidth))x\(Int(inputHeight))")
+            print("   🔄 rotation: \(rotation) rad (\(Int(rotation * 180 / .pi))°)")
+            print("   📏 viewAspect: \(viewAspect), textureAspect: \(textureAspect)")
+            print("   📷 camera: \(deviceType), isFront: \(isFront)")
+            print("   🎭 mirror: \(mirror), hasDepth: \(hasDepth)")
+        }
 
         guard let commandBuffer = queue.makeCommandBuffer() else { return }
 

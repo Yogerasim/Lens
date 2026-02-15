@@ -1,5 +1,5 @@
 import UIKit
-import AVFoundation
+internal import AVFoundation
 
 // MARK: - Device Capabilities
 struct DeviceCapabilities {

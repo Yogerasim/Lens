@@ -48,9 +48,11 @@ vertex VertexOut vertex_main(
     // 2) Aspect-fill через масштаб геометрии (позиции), НЕ UV
     // Эффективное соотношение сторон текстуры с учётом поворота: если повёрнута на 90°/270°, меняем местами
     float effectiveTextureAspect = uniforms.textureAspect;
-    float absRotation = abs(uniforms.rotation);
-    // Проверяем близость к π/2 (90°) или 3π/2 (270°)
-    bool isRotated90 = (abs(absRotation - 1.57079633f) < 0.1f) || (abs(absRotation - 4.71238898f) < 0.1f);
+    
+    // Надёжная проверка на поворот 90°/270° через sin
+    // sin(π/2) = 1, sin(-π/2) = -1, sin(3π/2) = -1, sin(0) = 0, sin(π) = 0
+    // Если |sin(rotation)| > 0.9 — значит повёрнуто на ~90°
+    bool isRotated90 = abs(sin(uniforms.rotation)) > 0.9f;
     if (isRotated90) {
         effectiveTextureAspect = 1.0 / effectiveTextureAspect;
     }
@@ -58,11 +60,9 @@ vertex VertexOut vertex_main(
     float viewAspect = uniforms.viewAspect;
     float2 scale = float2(1.0, 1.0);
     if (effectiveTextureAspect > viewAspect) {
-        // Текстура шире в сравнении с view — уменьшаем X позиции
-        scale.x = viewAspect / effectiveTextureAspect;
+        scale.y = effectiveTextureAspect / viewAspect;  // scale > 1, заполняет по Y
     } else {
-        // Текстура выше — уменьшаем Y позиции
-        scale.y = effectiveTextureAspect / viewAspect;
+        scale.x = viewAspect / effectiveTextureAspect;  // scale > 1, заполняет по X
     }
 
     float2 pos = basePos[vid] * scale;

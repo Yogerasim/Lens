@@ -29,12 +29,19 @@ final class FilterLibrary: ObservableObject {
         FilterDefinition(name: "Comic", shaderName: "fragment_comic"),
         FilterDefinition(name: "Tech Lines", shaderName: "fragment_techlines"),
         FilterDefinition(name: "Acid Trip", shaderName: "fragment_acidtrip"),
-        FilterDefinition(name: "Neural Painter", shaderName: "fragment_neural_painter"),
+        FilterDefinition(name: "Neural Painter", shaderName: "fragment_neuralpainter"),
         FilterDefinition(name: "Depth Fog", shaderName: "fragment_depthfog", needsDepth: true),
         FilterDefinition(name: "Depth Outline", shaderName: "fragment_depthoutline", needsDepth: true)
     ]
     
     private init() {
+        let depthFilters = filters.filter { $0.needsDepth }
         print("📚 FilterLibrary: Initialized with \(filters.count) filters")
+        print("   🤖 Depth filters (\(depthFilters.count)): \(depthFilters.map { $0.name }.joined(separator: ", "))")
+    }
+    
+    /// Поиск фильтра по имени шейдера
+    func filter(for shaderName: String) -> FilterDefinition? {
+        return filters.first { $0.shaderName == shaderName }
     }
 }
