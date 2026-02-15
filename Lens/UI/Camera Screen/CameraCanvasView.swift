@@ -28,14 +28,14 @@ struct CameraCanvasView: View {
                 .aspectRatio(9.0 / 16.0, contentMode: .fit)
                 .gesture(combinedGestures)
             
-            // Glass Intensity HUD (справа)
+            // Glass Intensity HUD (слева)
             HStack {
-                Spacer()
                 GlassIntensityHUD(
                     value: framePipeline.smoothedIntensity,
                     isVisible: isIntensityHUDVisible
                 )
-                .padding(.trailing, 16)
+                .padding(.leading, 16)
+                Spacer()
             }
         }
     }
