@@ -7,6 +7,8 @@ final class CameraManager: NSObject, ObservableObject {
     // MARK: - Public
     let session = AVCaptureSession()
     
+    
+    
     /// Замыкание для получения кадра
     var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
     
@@ -69,107 +71,65 @@ final class CameraManager: NSObject, ObservableObject {
             // Используем inputPriority чтобы вручную выбирать формат с depth
             self.session.sessionPreset = .inputPriority
             
-            // При старте ВСЕГДА используем обычную Wide камеру
-            // LiDAR включается только когда выбран depth-фильтр через applyDepthPolicy
-            var videoDevice: AVCaptureDevice?
+            print("🔵 CameraManager: Configuring session at startup")
+            print("   ℹ️ LiDAR will be enabled on demand when depth filter is selected")
             
+            // Настраиваем video и audio outputs
+            self.configureOutputs()
+            
+            // При старте ВСЕГДА используем обычную Wide камеру без depth
             let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
             let discovery = AVCaptureDevice.DiscoverySession(
                 deviceTypes: desiredTypes,
                 mediaType: .video,
                 position: self.currentPosition
             )
-            videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first
-            print("🔵 CameraManager: Using standard Wide camera at startup")
-            print("   ℹ️ LiDAR will be enabled on demand when depth filter is selected")
             
-            // Remove old inputs if any
-            if let existing = self.currentInput {
-                self.session.removeInput(existing)
-                self.currentInput = nil
-            }
-            
-            if let device = videoDevice {
-                do {
-                    let input = try AVCaptureDeviceInput(device: device)
-                    if self.session.canAddInput(input) {
-                        self.session.addInput(input)
-                        self.currentInput = input
-                        if self.currentPosition == .back {
-                            self.currentBackDeviceType = device.deviceType
-                        }
-                        
-                        // Принт информации о камере
-                        let depthSupported = device.activeFormat.supportedDepthDataFormats.count > 0
-                        print("📹 CameraManager: Current camera - \(device.deviceType.rawValue) (\(device.position == .back ? "back" : "front"))")
-                        print("   📊 Depth supported: \(depthSupported ? "YES" : "NO")")
-                    }
-                } catch {
-                    print("❌ Failed to create video input: \(error)")
-                }
+            if let videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first {
+                // Используем универсальный метод конфигурации без depth
+                self.configureCamera(device: videoDevice, enableDepth: false)
+                
+                print("🔵 CameraManager: Depth will be enabled on demand (when depth filter selected)")
             } else {
                 print("❌ No video device found")
             }
             
-            // Audio input (try add; if permission denied later, session will still run)
-            if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
-                if let mic = AVCaptureDevice.default(for: .audio) {
-                    do {
-                        let inAudio = try AVCaptureDeviceInput(device: mic)
-                        if self.session.canAddInput(inAudio) {
-                            self.session.addInput(inAudio)
-                            self.audioInput = inAudio
-                        }
-                    } catch {
-                        print("⚠️ Failed to create audio input: \(error)")
-                    }
-                }
-            }
-            
-            // Video output settings
-            self.videoOutput.alwaysDiscardsLateVideoFrames = true
-            // BGRA is convenient for CI/Metal path you use
-            self.videoOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
-            self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
-            if self.session.canAddOutput(self.videoOutput) {
-                self.session.addOutput(self.videoOutput)
-            }
-            
-            // Audio output
-            self.audioOutput.setSampleBufferDelegate(self, queue: self.audioOutputQueue)
-            if self.session.canAddOutput(self.audioOutput) {
-                self.session.addOutput(self.audioOutput)
-            }
-            
-            // Orientation / rotation for portrait
-            if let connection = self.videoOutput.connection(with: .video) {
-                if #available(iOS 17.0, *) {
-                    connection.videoRotationAngle = 0 // не вращаем буфер, поворот в шейдере
-                } else {
-                    if connection.isVideoOrientationSupported {
-                        connection.videoOrientation = .portrait // влияет на метаданные, не на буфер
-                    }
-                }
-                // Mirror выключен — зеркалим в шейдере
-                if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = false
-                }
-            }
-            
-            // Update zoom limits and configure FPS (depth включается отдельно по запросу фильтра)
-            if let device = self.currentInput?.device {
-                self.updateZoomLimits(for: device)
-                
-                // Configure frame rate to max FPS
-                self.configureFrameRate(for: device)
-                
-                // НЕ включаем depth автоматически - он включится когда выберут depth-фильтр
-                print("🔵 CameraManager: Depth will be enabled on demand (when depth filter selected)")
-            }
-            
             self.session.commitConfiguration()
+        }
+    }
+    
+    /// Настраиваем video и audio outputs
+    private func configureOutputs() {
+        // Audio input (try add; if permission denied later, session will still run)
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
+            if let mic = AVCaptureDevice.default(for: .audio) {
+                do {
+                    let inAudio = try AVCaptureDeviceInput(device: mic)
+                    if self.session.canAddInput(inAudio) {
+                        self.session.addInput(inAudio)
+                        self.audioInput = inAudio
+                    }
+                } catch {
+                    print("⚠️ Failed to create audio input: \(error)")
+                }
+            }
+        }
+        
+        // Video output settings
+        self.videoOutput.alwaysDiscardsLateVideoFrames = true
+        // BGRA is convenient for CI/Metal path you use
+        self.videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+        self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
+        if self.session.canAddOutput(self.videoOutput) {
+            self.session.addOutput(self.videoOutput)
+        }
+        
+        // Audio output
+        self.audioOutput.setSampleBufferDelegate(self, queue: self.audioOutputQueue)
+        if self.session.canAddOutput(self.audioOutput) {
+            self.session.addOutput(self.audioOutput)
         }
     }
     
@@ -241,12 +201,8 @@ final class CameraManager: NSObject, ObservableObject {
                 return
             }
             
-            guard let device = self.currentInput?.device else { return }
-            
-            self.session.beginConfiguration()
-            self.configureDepthFormat(for: device)
-            self.session.commitConfiguration()
-            
+            // Depth включен через новую архитектуру (setDepthEnabled -> configureCamera)
+            print("ℹ️ CameraManager: Use setDepthEnabled method instead of enableDepth")
             print("✅ CameraManager: Depth enabled")
         }
     }
@@ -300,56 +256,44 @@ final class CameraManager: NSObject, ObservableObject {
             print("❌ CameraManager: No device for type: \(type) position: \(position)")
             return
         }
+        
         do {
-            let newInput = try AVCaptureDeviceInput(device: device)
-            session.beginConfiguration()
-            
-            // Удаляем depth output если меняем камеру
-            print("🔴 CameraManager: Removing depth output before switch")
-            DepthManager.shared.removeDepthOutput(from: session)
-            
-            if let currentInput = self.currentInput {
-                session.removeInput(currentInput)
-            }
-            if session.canAddInput(newInput) { session.addInput(newInput) }
-            self.currentInput = newInput
+            // Обновляем позицию камеры
             self.currentPosition = position
-            if position == .back { self.currentBackDeviceType = device.deviceType }
-            
-            // Orientation
-            if let connection = self.videoOutput.connection(with: .video) {
-                if #available(iOS 17.0, *) {
-                    connection.videoRotationAngle = 0 // не вращаем буфер, поворот в шейдере
-                } else {
-                    connection.videoOrientation = .portrait
-                }
-                // Mirror всегда выключен — зеркалим в шейдере
-                if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = false
-                }
+            if position == .back {
+                self.currentBackDeviceType = device.deviceType
             }
             
             // Логируем обновление rotation
             let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
             print("🧭 CameraManager: rotation updated = \(newRotation) (\(Int(newRotation * 180 / .pi))°), mirrored=\(position == .front)")
             
-            // Настраиваем FPS для новой камеры
-            self.configureFrameRate(for: device)
-            
-            // Depth включаем только если текущий фильтр его требует И это back camera x1
+            // Определяем нужен ли depth для текущего фильтра
             let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
-            if position == .back && type == .builtInWideAngleCamera && needsDepth {
-                print("🟢 CameraManager: Enabling LiDAR depth (back x1 + depth filter)")
-                self.configureDepthFormat(for: device)
+            let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
+            
+            if enableDepth {
+                print("🟢 CameraManager: Enabling depth (back x1 + depth filter)")
             } else {
                 print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
             }
             
+            // Используем универсальный метод конфигурации
+            // (он сам управляет beginConfiguration/commitConfiguration)
+            session.beginConfiguration()
+            
+            // Удаляем depth output если меняем камеру
+            print("🔴 CameraManager: Removing depth output before switch")
+            DepthManager.shared.removeDepthOutput(from: session)
+            
+            // Настраиваем новую камеру с правильными параметрами
+            configureCamera(device: device, enableDepth: enableDepth)
+            
             session.commitConfiguration()
             
-            self.updateZoomLimits(for: device)
+            updateZoomLimits(for: device)
             print("✅ CameraManager: Switched to \(device.localizedName)")
-            self.setZoom(1.0) // Сбросить на оптический базовый зум
+            setZoom(1.0) // Сбросить на оптический базовый зум
             
         } catch {
             print("❌ switchToDevice error: \(error)")
@@ -366,92 +310,161 @@ final class CameraManager: NSObject, ObservableObject {
         DispatchQueue.main.async { self.currentZoomFactor = max(self.currentZoomFactor, self.minZoomFactor) }
     }
     
-    // MARK: - Depth Configuration
-    private func configureDepthFormat(for device: AVCaptureDevice) {
-        let targetFPS = Double(DeviceCapabilities.current.maxFPS)
+    /// Универсальный метод конфигурации камеры (для обычного режима и depth)
+    private func configureCamera(device: AVCaptureDevice, enableDepth: Bool) {
+        print("📷 Configuring camera:")
+        print("   📷 Active device: \(device.deviceType.rawValue)")
+        print("   📊 Depth enabled: \(enableDepth)")
         
-        // Find formats that support depth
-        let depthFormats = device.formats.filter { format in
-            !format.supportedDepthDataFormats.isEmpty
+        // 1. Удаляем старый input
+        if let existing = currentInput {
+            session.removeInput(existing)
         }
         
-        guard !depthFormats.isEmpty else {
-            print("⚠️ CameraManager: No formats with depth support found for \(device.localizedName)")
+        // 2. Создаём и добавляем новый input
+        do {
+            let input = try AVCaptureDeviceInput(device: device)
+            guard session.canAddInput(input) else {
+                print("❌ CameraManager: Cannot add device input")
+                return
+            }
+            session.addInput(input)
+            currentInput = input
+            
+            if currentPosition == .back {
+                currentBackDeviceType = device.deviceType
+            }
+        } catch {
+            print("❌ CameraManager: Failed to create device input: \(error)")
             return
         }
         
-        print("🔵 CameraManager: Found \(depthFormats.count) formats with depth support")
+        // 3. Выбираем формат (с поддержкой depth если нужно)
+        var selectedFormat: AVCaptureDevice.Format?
         
-        // Find the best format with depth and target FPS support
-        for format in depthFormats {
-            let ranges = format.videoSupportedFrameRateRanges
-            let supportsTargetFPS = ranges.contains { $0.maxFrameRate >= targetFPS }
+        if enableDepth {
+            print("🔍 Looking for depth format on Wide camera...")
             
-            guard supportsTargetFPS else { continue }
-            guard let depthFormat = format.supportedDepthDataFormats.first else { continue }
+            // Сначала ищем depth-форматы
+            let depthFormats = device.formats.filter { !$0.supportedDepthDataFormats.isEmpty }
+            print("   Found \(depthFormats.count) formats with depth support")
             
-            do {
-                try device.lockForConfiguration()
-                device.activeFormat = format
-                device.activeDepthDataFormat = depthFormat
-                
-                // Устанавливаем target FPS
-                let frameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
-                device.activeVideoMinFrameDuration = frameDuration
-                device.activeVideoMaxFrameDuration = frameDuration
-                
-                device.unlockForConfiguration()
-                
-                let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                let depthDim = CMVideoFormatDescriptionGetDimensions(depthFormat.formatDescription)
-                print("✅ CameraManager: Configured depth format - video: \(dim.width)x\(dim.height), depth: \(depthDim.width)x\(depthDim.height) at \(Int(targetFPS)) FPS")
-                
-                // НЕ вызываем setupDepthOutput здесь - он уже вызван в setDepthEnabled
-                return
-            } catch {
-                print("❌ CameraManager: Failed to configure depth format: \(error)")
+            // Предпочтительные разрешения в порядке приоритета
+            let preferredWidths: [Int32] = [1920, 1280] // 1920x1080, 1280x720
+            
+            // Ищем среди предпочтительных разрешений
+            for preferredWidth in preferredWidths {
+                selectedFormat = depthFormats.first { format in
+                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    return dim.width == preferredWidth
+                }
+                if selectedFormat != nil {
+                    let dim = CMVideoFormatDescriptionGetDimensions(selectedFormat!.formatDescription)
+                    print("   📐 Selected preferred format: \(dim.width)x\(dim.height), depth formats: \(selectedFormat!.supportedDepthDataFormats.count)")
+                    break
+                }
             }
+            
+            // Если не нашли предпочтительное - берем лучший по разрешению
+            if selectedFormat == nil && !depthFormats.isEmpty {
+                selectedFormat = depthFormats.max { format1, format2 in
+                    let dim1 = CMVideoFormatDescriptionGetDimensions(format1.formatDescription)
+                    let dim2 = CMVideoFormatDescriptionGetDimensions(format2.formatDescription)
+                    return dim1.width * dim1.height < dim2.width * dim2.height
+                }
+                
+                if let format = selectedFormat {
+                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    print("   📐 Selected best available format: \(dim.width)x\(dim.height), depth formats: \(format.supportedDepthDataFormats.count)")
+                }
+            }
+            
+            if selectedFormat == nil {
+                print("❌ CameraManager: No depth-compatible format found")
+                return
+            } else {
+                print("✅ Selected depth format successfully")
+            }
+        } else {
+            // Для обычного режима используем лучший доступный формат
+            selectedFormat = findBestFormat(for: device)
         }
         
-        print("⚠️ CameraManager: Could not find suitable depth format with \(Int(targetFPS)) FPS")
+        // 4. Устанавливаем формат и FPS
+        if let format = selectedFormat {
+            configureFormat(device: device, format: format)
+        }
+        
+        // 5. Настраиваем video connection (одинаково для обычного и depth режима)
+        configureVideoConnection()
+        
+        // 6. Настраиваем depth если нужно
+        if enableDepth {
+            DepthManager.shared.setupDepthOutput(for: session)
+            synchronizeDepthOrientation()
+            print("✅ CameraManager: Depth output configured")
+        } else {
+            DepthManager.shared.removeDepthOutput(from: session)
+            print("✅ CameraManager: Depth output removed")
+        }
+        
+        // 7. Обновляем zoom limits
+        updateZoomLimits(for: device)
+        
+        print("✅ CameraManager: Camera configured successfully")
     }
     
-    // MARK: - Frame Rate Configuration
-    private func configureFrameRate(for device: AVCaptureDevice) {
+    /// Находит лучший формат для устройства (без depth)
+    private func findBestFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
         let targetFPS = Double(DeviceCapabilities.current.maxFPS)
         
-        // Найдём формат, поддерживающий target FPS
         var bestFormat: AVCaptureDevice.Format?
-        var bestFrameRateRange: AVFrameRateRange?
         
         for format in device.formats {
-            for range in format.videoSupportedFrameRateRanges {
-                if range.maxFrameRate >= targetFPS {
-                    // Предпочитаем формат с более высоким разрешением
-                    if bestFormat == nil {
+            // Проверяем поддержку целевого FPS
+            let supportsTargetFPS = format.videoSupportedFrameRateRanges.contains { range in
+                range.maxFrameRate >= targetFPS
+            }
+            
+            if supportsTargetFPS {
+                // Предпочитаем формат с более высоким разрешением
+                if bestFormat == nil {
+                    bestFormat = format
+                } else {
+                    let currentDim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    let bestDim = CMVideoFormatDescriptionGetDimensions(bestFormat!.formatDescription)
+                    if currentDim.width * currentDim.height > bestDim.width * bestDim.height {
                         bestFormat = format
-                        bestFrameRateRange = range
-                    } else {
-                        let currentDim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                        let bestDim = CMVideoFormatDescriptionGetDimensions(bestFormat!.formatDescription)
-                        if currentDim.width * currentDim.height > bestDim.width * bestDim.height {
-                            bestFormat = format
-                            bestFrameRateRange = range
-                        }
                     }
                 }
             }
         }
         
-        guard let format = bestFormat, let range = bestFrameRateRange else {
-            print("⚠️ CameraManager: No format supports \(targetFPS) FPS")
+        return bestFormat ?? device.activeFormat
+    }
+    
+    /// Конфигурирует формат и FPS для устройства
+    private func configureFormat(device: AVCaptureDevice, format: AVCaptureDevice.Format) {
+        let targetFPS = Double(DeviceCapabilities.current.maxFPS)
+        
+        // Ищем подходящий frame rate range
+        var bestFrameRateRange: AVFrameRateRange?
+        for range in format.videoSupportedFrameRateRanges {
+            if range.maxFrameRate >= targetFPS {
+                bestFrameRateRange = range
+                break
+            }
+        }
+        
+        guard let frameRateRange = bestFrameRateRange else {
+            print("⚠️ CameraManager: Format doesn't support \(targetFPS) FPS")
             return
         }
         
         do {
             try device.lockForConfiguration()
             
-            // Устанавливаем формат если он отличается от текущего
+            // Устанавливаем формат
             if device.activeFormat != format {
                 device.activeFormat = format
             }
@@ -464,10 +477,38 @@ final class CameraManager: NSObject, ObservableObject {
             device.unlockForConfiguration()
             
             let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            print("✅ CameraManager: Configured \(Int(targetFPS)) FPS at \(dim.width)x\(dim.height)")
+            print("📐 Active format: \(dim.width)x\(dim.height) @ \(Int(targetFPS))fps")
+            
+            // Проверяем поддержку depth
+            let depthSupported = !format.supportedDepthDataFormats.isEmpty
+            print("📊 Format supports depth: \(depthSupported ? "YES" : "NO")")
+            
         } catch {
-            print("❌ CameraManager: Failed to configure frame rate: \(error)")
+            print("❌ CameraManager: Failed to configure format: \(error)")
         }
+    }
+    
+    /// Конфигурирует video connection (одинаково для всех режимов)
+    private func configureVideoConnection() {
+        guard let connection = videoOutput.connection(with: .video) else {
+            print("⚠️ CameraManager: No video connection found")
+            return
+        }
+        
+        if #available(iOS 17.0, *) {
+            connection.videoRotationAngle = 0 // не вращаем буфер, поворот в шейдере
+        } else {
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .portrait // влияет на метаданные, не на буфер
+            }
+        }
+        
+        // Mirror только для фронтальной камеры (но мы делаем это в шейдере)
+        if connection.isVideoMirroringSupported {
+            connection.isVideoMirrored = false
+        }
+        
+        print("✅ CameraManager: Video connection configured")
     }
 }
 
@@ -575,9 +616,9 @@ extension CameraManager {
         print("🔵 CameraManager: setDepthEnabled(\(enabled)) - \(reason)")
         
         // Идемпотентность — если состояние не изменилось, ничего не делаем
-        guard enabled != isDepthEnabled else { 
+        guard enabled != isDepthEnabled else {
             print("   ↪️ Depth already \(enabled ? "enabled" : "disabled"), skipping")
-            return 
+            return
         }
         
         sessionQueue.async { [weak self] in
@@ -587,73 +628,105 @@ extension CameraManager {
             defer { self.session.commitConfiguration() }
             
             if enabled {
-                print("🟢 CameraManager: ENABLING depth - switching to LiDAR camera")
+                print("🟢 CameraManager: ENABLING depth - looking for LiDAR camera")
                 
-                // Переключаемся на LiDAR камеру
-                if let lidarDevice = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: .back) {
-                    // Удаляем текущий input
-                    if let existing = self.currentInput {
-                        self.session.removeInput(existing)
-                    }
+                // На iPhone 14 Pro используем builtInLiDARDepthCamera
+                let lidarDiscovery = AVCaptureDevice.DiscoverySession(
+                    deviceTypes: [.builtInLiDARDepthCamera],
+                    mediaType: .video,
+                    position: .back
+                )
+                
+                if let lidarDevice = lidarDiscovery.devices.first {
+                    print("✅ CameraManager: Found LiDAR camera - \(lidarDevice.localizedName)")
+                    self.configureCamera(device: lidarDevice, enableDepth: true)
                     
-                    do {
-                        let input = try AVCaptureDeviceInput(device: lidarDevice)
-                        if self.session.canAddInput(input) {
-                            self.session.addInput(input)
-                            self.currentInput = input
-                            print("✅ CameraManager: Switched to LiDAR camera")
-                        }
-                    } catch {
-                        print("❌ CameraManager: Failed to switch to LiDAR: \(error)")
+                    // Обновляем флаг на main thread
+                    DispatchQueue.main.async {
+                        self.isDepthEnabled = true
+                        print("📱 CameraManager: UI updated - isDepthEnabled = true")
                     }
-                    
-                    // Настраиваем depth output
-                    DepthManager.shared.setupDepthOutput(for: self.session)
-                    self.configureDepthFormat(for: lidarDevice)
                 } else {
-                    print("❌ CameraManager: LiDAR camera not available")
+                    // Fallback: пробуем найти Wide камеру с depth support
+                    print("⚠️ CameraManager: No LiDAR camera, trying Wide camera with depth formats")
+                    
+                    let wideDiscovery = AVCaptureDevice.DiscoverySession(
+                        deviceTypes: [.builtInWideAngleCamera],
+                        mediaType: .video,
+                        position: .back
+                    )
+                    
+                    if let wideDevice = wideDiscovery.devices.first {
+                        let hasDepthFormats = wideDevice.formats.contains { !$0.supportedDepthDataFormats.isEmpty }
+                        if hasDepthFormats {
+                            print("✅ CameraManager: Wide camera has depth formats")
+                            self.configureCamera(device: wideDevice, enableDepth: true)
+                            
+                            DispatchQueue.main.async {
+                                self.isDepthEnabled = true
+                                print("📱 CameraManager: UI updated - isDepthEnabled = true")
+                            }
+                        } else {
+                            print("❌ CameraManager: No depth support available on this device")
+                        }
+                    }
                 }
-                
-                print("✅ CameraManager: Depth ENABLED")
             } else {
-                print("⚪️ CameraManager: DISABLING depth")
-                // Убираем depth output
-                DepthManager.shared.removeDepthOutput(from: self.session)
+                print("⚪️ CameraManager: DISABLING depth - switching to Wide camera")
                 
-                // Переключаемся обратно на обычную Wide камеру
-                let discovery = AVCaptureDevice.DiscoverySession(
+                // Находим Wide камеру для отключения depth
+                let wideDiscovery = AVCaptureDevice.DiscoverySession(
                     deviceTypes: [.builtInWideAngleCamera],
                     mediaType: .video,
-                    position: self.currentPosition
+                    position: .back
                 )
-                if let wideDevice = discovery.devices.first {
-                    // Удаляем текущий input
-                    if let existing = self.currentInput {
-                        self.session.removeInput(existing)
-                    }
-                    
-                    do {
-                        let input = try AVCaptureDeviceInput(device: wideDevice)
-                        if self.session.canAddInput(input) {
-                            self.session.addInput(input)
-                            self.currentInput = input
-                            self.configureFrameRate(for: wideDevice)
-                            print("✅ CameraManager: Switched back to Wide camera")
-                        }
-                    } catch {
-                        print("❌ CameraManager: Failed to switch to Wide: \(error)")
-                    }
+                
+                if let wideDevice = wideDiscovery.devices.first {
+                    self.configureCamera(device: wideDevice, enableDepth: false)
+                    print("✅ CameraManager: Depth DISABLED")
                 }
                 
-                print("✅ CameraManager: Depth DISABLED")
-            }
-            
-            // Обновляем флаг на main thread
-            DispatchQueue.main.async {
-                self.isDepthEnabled = enabled
-                print("📱 CameraManager: UI updated - isDepthEnabled = \(enabled)")
+                // Обновляем флаг на main thread
+                DispatchQueue.main.async {
+                    self.isDepthEnabled = false
+                    print("📱 CameraManager: UI updated - isDepthEnabled = false")
+                }
             }
         }
+    }
+    
+    /// Синхронизирует orientation для video и depth outputs
+    private func synchronizeDepthOrientation() {
+        guard let videoConnection = videoOutput.connection(with: .video),
+              let depthOutput = DepthManager.shared.depthOutput,
+              let depthConnection = depthOutput.connection(with: .depthData) else {
+            print("⚠️ CameraManager: Cannot synchronize - missing connections")
+            return
+        }
+        
+        // Устанавливаем одинаковые параметры
+        let orientation: AVCaptureVideoOrientation = .portrait
+        let shouldMirror = currentPosition == .front
+        
+        // Video connection
+        if videoConnection.isVideoOrientationSupported {
+            videoConnection.videoOrientation = orientation
+        }
+        if videoConnection.isVideoMirroringSupported {
+            videoConnection.isVideoMirrored = shouldMirror
+        }
+        
+        // Depth connection
+        if depthConnection.isVideoOrientationSupported {
+            depthConnection.videoOrientation = orientation
+        }
+        if depthConnection.isVideoMirroringSupported {
+            depthConnection.isVideoMirrored = shouldMirror
+        }
+        
+        print("📐 CameraManager: Synchronized orientation for video and depth")
+        print("   📹 Video - orientation: \(orientation.rawValue) (portrait), mirrored: \(shouldMirror)")
+        print("   📊 Depth - orientation: \(orientation.rawValue) (portrait), mirrored: \(shouldMirror)")
     }
 }
 

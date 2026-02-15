@@ -6,12 +6,10 @@ final class DepthManager: NSObject {
 
     static let shared = DepthManager()
 
-    private var depthOutput: AVCaptureDepthDataOutput?
-    private let depthQueue = DispatchQueue(label: "depth.data.queue", qos: .userInitiated)
-    
-    
+    /// Depth output для доступа из CameraManager
+    private(set) var depthOutput: AVCaptureDepthDataOutput?
 
-    /// Последняя depth map (CVPixelBuffer). Формат зависит от камеры (часто DepthFloat16 / Disparity).
+    private let depthQueue = DispatchQueue(label: "depth.data.queue", qos: .userInitiated)
     private(set) var latestDepthMap: CVPixelBuffer?
     private(set) var latestDepthTime: CMTime = .invalid
     
@@ -101,7 +99,9 @@ extension DepthManager: AVCaptureDepthDataOutputDelegate {
         }
         lastDeliveredTime = timestamp
 
-        // Получаем depth map без конвертации
+        // ✅ FIX: НЕ применяем EXIF orientation здесь!
+        // Depth buffer должен быть в той же системе координат что и RGB buffer.
+        // Трансформация (rotation/mirror) применяется в шейдере через uniforms.
         let depthMap = depthData.depthDataMap
 
         latestDepthMap = depthMap

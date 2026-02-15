@@ -9,6 +9,8 @@ struct Uniforms {
     float rotation;    // поворот в радианах
     float mirror;      // зеркалирование (0.0 или 1.0)
     float hasDepth;    // есть ли depth данные (0.0 или 1.0)
+    float depthFlipX;  // 1.0 = flip X для depth UV
+    float depthFlipY;  // 1.0 = flip Y для depth UV
 };
 
 // MARK: - Vertex Output
@@ -34,7 +36,7 @@ vertex VertexOut vertex_main(
         {0, 1}, {1, 1}
     };
 
-    // 1) Поворот + зеркалирование UV вокруг центра
+    // 1) Поворот UV вокруг центра (mirroring делается через AVCapture)
     float2 uv = baseUV[vid];
     float2 centeredUV = uv - 0.5;
     float cosR = cos(uniforms.rotation);
@@ -43,7 +45,7 @@ vertex VertexOut vertex_main(
     rotUV.x = centeredUV.x * cosR - centeredUV.y * sinR;
     rotUV.y = centeredUV.x * sinR + centeredUV.y * cosR;
     rotUV += 0.5;
-    if (uniforms.mirror > 0.5) { rotUV.x = 1.0 - rotUV.x; }
+    // ✅ FIX: Manual mirror убран - mirroring происходит на уровне AVCapture
 
     // 2) Aspect-fill через масштаб геометрии (позиции), НЕ UV
     // Эффективное соотношение сторон текстуры с учётом поворота: если повёрнута на 90°/270°, меняем местами
@@ -486,6 +488,15 @@ fragment float4 fragment_depthfog(
     float2 uv = in.uv;
     float time = uniforms.time;
     
+    // --- Depth UV с коррекцией ориентации ---
+    float2 depthUV = uv;
+    if (uniforms.depthFlipX > 0.5) {
+        depthUV.x = 1.0 - depthUV.x;
+    }
+    if (uniforms.depthFlipY > 0.5) {
+        depthUV.y = 1.0 - depthUV.y;
+    }
+    
     // --- 1. Получаем цвет камеры ---
     float4 color = tex.sample(s, uv);
     
@@ -499,8 +510,8 @@ fragment float4 fragment_depthfog(
         return color;
     }
     
-    // --- 3. Получаем depth значение ---
-    float depth = depthTex.sample(s, uv).r;
+    // --- 3. Получаем depth значение (используем скорректированные UV) ---
+    float depth = depthTex.sample(s, depthUV).r;
     
     // Нормализуем depth (обычно в метрах, ограничиваем 0-5м)
     float normalizedDepth = clamp(depth / 5.0, 0.0, 1.0);
@@ -523,10 +534,11 @@ fragment float4 fragment_depthfog(
     float2 texSize = float2(depthTex.get_width(), depthTex.get_height());
     float2 pixelSize = 1.0 / texSize;
     
-    float depthL = depthTex.sample(s, uv + float2(-pixelSize.x, 0)).r;
-    float depthR = depthTex.sample(s, uv + float2(pixelSize.x, 0)).r;
-    float depthU = depthTex.sample(s, uv + float2(0, -pixelSize.y)).r;
-    float depthD = depthTex.sample(s, uv + float2(0, pixelSize.y)).r;
+    // Используем depthUV для edge detection тоже
+    float depthL = depthTex.sample(s, depthUV + float2(-pixelSize.x, 0)).r;
+    float depthR = depthTex.sample(s, depthUV + float2(pixelSize.x, 0)).r;
+    float depthU = depthTex.sample(s, depthUV + float2(0, -pixelSize.y)).r;
+    float depthD = depthTex.sample(s, depthUV + float2(0, pixelSize.y)).r;
     
     float depthEdge = abs(depthL - depthR) + abs(depthU - depthD);
     float edgeStrength = smoothstep(0.05, 0.2, depthEdge);
@@ -559,6 +571,15 @@ fragment float4 fragment_depthoutline(
     float2 uv = in.uv;
     float time = uniforms.time;
     
+    // --- Depth UV с коррекцией ориентации ---
+    float2 depthUV = uv;
+    if (uniforms.depthFlipX > 0.5) {
+        depthUV.x = 1.0 - depthUV.x;
+    }
+    if (uniforms.depthFlipY > 0.5) {
+        depthUV.y = 1.0 - depthUV.y;
+    }
+    
     float4 color = tex.sample(s, uv);
     
     // Без depth — просто показываем камеру
@@ -566,22 +587,23 @@ fragment float4 fragment_depthoutline(
         return color;
     }
     
-    // Получаем depth
-    float depth = depthTex.sample(s, uv).r;
+    // Получаем depth (используем скорректированные UV)
+    float depth = depthTex.sample(s, depthUV).r;
     float normalizedDepth = clamp(depth / 5.0, 0.0, 1.0);
     
     // Sobel по depth для контуров
     float2 texSize = float2(depthTex.get_width(), depthTex.get_height());
     float2 ps = 1.0 / texSize;
     
-    float tl = depthTex.sample(s, uv + float2(-ps.x, -ps.y)).r;
-    float t  = depthTex.sample(s, uv + float2(0, -ps.y)).r;
-    float tr = depthTex.sample(s, uv + float2(ps.x, -ps.y)).r;
-    float l  = depthTex.sample(s, uv + float2(-ps.x, 0)).r;
-    float r  = depthTex.sample(s, uv + float2(ps.x, 0)).r;
-    float bl = depthTex.sample(s, uv + float2(-ps.x, ps.y)).r;
-    float b  = depthTex.sample(s, uv + float2(0, ps.y)).r;
-    float br = depthTex.sample(s, uv + float2(ps.x, ps.y)).r;
+    // Используем depthUV для edge detection
+    float tl = depthTex.sample(s, depthUV + float2(-ps.x, -ps.y)).r;
+    float t  = depthTex.sample(s, depthUV + float2(0, -ps.y)).r;
+    float tr = depthTex.sample(s, depthUV + float2(ps.x, -ps.y)).r;
+    float l  = depthTex.sample(s, depthUV + float2(-ps.x, 0)).r;
+    float r  = depthTex.sample(s, depthUV + float2(ps.x, 0)).r;
+    float bl = depthTex.sample(s, depthUV + float2(-ps.x, ps.y)).r;
+    float b  = depthTex.sample(s, depthUV + float2(0, ps.y)).r;
+    float br = depthTex.sample(s, depthUV + float2(ps.x, ps.y)).r;
     
     float sobelX = -tl - 2.0*l - bl + tr + 2.0*r + br;
     float sobelY = -tl - 2.0*t - tr + bl + 2.0*b + br;

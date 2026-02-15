@@ -5,6 +5,8 @@ internal import AVFoundation
 final class FramePipeline: ObservableObject {
 
     static let shared = FramePipeline()
+    
+    
 
     // Используем динамический FPS на основе устройства
     let gate = FrameGate()  // внутри берёт DeviceCapabilities.current.maxFPS
@@ -56,23 +58,23 @@ final class FramePipeline: ObservableObject {
             guard let self else { return }
 
             // Берём depth только если фильтр его требует И depth активен
-            let depthPB: CVPixelBuffer?
+            let depthBuffer: CVPixelBuffer?
             if self.activeFilter?.needsDepth == true && DepthManager.shared.isActive {
-                depthPB = DepthManager.shared.latestDepthPixelBuffer
+                depthBuffer = DepthManager.shared.latestDepthPixelBuffer
             } else {
-                depthPB = nil
+                depthBuffer = nil
             }
 
             let packet = FramePacket(
                 pixelBuffer: pixelBuffer,
                 time: time,
-                depthPixelBuffer: depthPB
+                depthPixelBuffer: depthBuffer
             )
 
             // Рендер на своём потоке
             self.renderer?.render(packet: packet, activeFilter: self.activeFilter)
         }
-
+        
         print("📱 Device: \(DeviceCapabilities.current.modelName)")
         print("📹 Max FPS: \(DeviceCapabilities.current.maxFPS)")
         print("🎬 FramePipeline: Initialized with filter '\(activeFilter?.name ?? "none")'")
@@ -85,4 +87,3 @@ final class FramePipeline: ObservableObject {
         }
     }
 }
-

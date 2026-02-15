@@ -141,9 +141,30 @@ final class MetalRenderer: RenderEngine {
         let inputHeight = Float(inputTexture.height)
         let textureAspect = inputWidth / inputHeight
         
-        // Получаем информацию о камере
-        let rotation = cameraManager?.rotation ?? Float.pi / 2.0
-        let mirror: Float = (cameraManager?.isFrontCamera == true) ? 1.0 : 0.0
+        // ✅ FIX: Автоматическое определение rotation по размерам буфера
+        // Если буфер уже portrait (w < h) - не вращаем
+        // Если буфер landscape (w > h) - вращаем на 90°
+        let bufferWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
+        
+        let rotation: Float
+        if bufferWidth < bufferHeight {
+            // Буфер уже portrait (например LiDAR 1080x1920) - не вращаем
+            rotation = 0.0
+        } else {
+            // Буфер landscape (обычная камера 3840x2160) - вращаем на 90°
+            rotation = Float.pi / 2.0
+        }
+        
+        // Mirror только для front camera, в LiDAR режиме всегда 0
+        let isFrontCamera = cameraManager?.isFrontCamera ?? false
+        let mirror: Float = isFrontCamera ? 1.0 : 0.0
+        
+        // ✅ FIX: Depth UV коррекция для LiDAR режима
+        // LiDAR depth map имеет другую ориентацию чем RGB - нужен flip
+        let isLiDARMode = cameraManager?.isDepthEnabled ?? false
+        let depthFlipX: Float = 0.0  // Обычно X не нужно флипать
+        let depthFlipY: Float = isLiDARMode ? 1.0 : 0.0  // Флипаем Y в LiDAR режиме
 
         var uniforms = ShaderUniforms(
             time: shaderManager.animationTime,
@@ -151,13 +172,29 @@ final class MetalRenderer: RenderEngine {
             textureAspect: textureAspect,
             rotation: rotation,
             mirror: mirror,
-            hasDepth: hasDepth
+            hasDepth: hasDepth,
+            depthFlipX: depthFlipX,
+            depthFlipY: depthFlipY
         )
         
-        // Диагностические принты с троттлингом
+        // Диагностические принты с троттлингом (раз в 2 секунды)
         let now = CACurrentMediaTime()
         if now - lastDiagnosticPrintTime > diagnosticPrintInterval {
             lastDiagnosticPrintTime = now
+            
+            // Логируем автоматический rotation
+            print("🧭 AutoRotation: w=\(bufferWidth) h=\(bufferHeight) rotation=\(rotation == 0 ? "0 (portrait)" : "π/2 (landscape)") hasDepth=\(hasDepth)")
+            
+            // Логируем depth flip флаги
+            print("🧪 DepthFlip: depthFlipX=\(depthFlipX) depthFlipY=\(depthFlipY) isLiDARMode=\(isLiDARMode)")
+            
+            // Логируем размеры depth если есть
+            if let depthBuffer = depthPixelBuffer {
+                let depthW = CVPixelBufferGetWidth(depthBuffer)
+                let depthH = CVPixelBufferGetHeight(depthBuffer)
+                print("📊 DepthBuffer size: \(depthW)x\(depthH)")
+            }
+            
             let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
             let isFront = cameraManager?.isFrontCamera ?? false
             print("🔍 MetalRenderer diagnostic:")
