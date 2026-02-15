@@ -167,16 +167,16 @@ final class MetalRenderer: RenderEngine {
         
         let rotation: Float
         if bufferWidth < bufferHeight {
-            // Буфер уже portrait (например LiDAR 1080x1920) - не вращаем
+            // Буфер уже portrait (например LiDAR 1080x1920 или iOS 17+ с videoRotationAngle=90) - не вращаем
             rotation = 0.0
         } else {
             // Буфер landscape (обычная камера 3840x2160) - вращаем на 90°
             rotation = Float.pi / 2.0
         }
         
-        // Mirror только для front camera, в LiDAR режиме всегда 0
-        let isFrontCamera = cameraManager?.isFrontCamera ?? false
-        let mirror: Float = isFrontCamera ? 1.0 : 0.0
+        // ✅ FIX: Mirror теперь ТОЛЬКО через AVCaptureConnection, не в шейдере
+        // Это исключает двойное зеркалирование
+        let mirror: Float = 0.0
         
         // ✅ FIX: Depth UV коррекция для LiDAR режима
         // LiDAR depth map имеет другую ориентацию чем RGB - нужен flip
@@ -220,7 +220,8 @@ final class MetalRenderer: RenderEngine {
             print("   🔄 rotation: \(rotation) rad (\(Int(rotation * 180 / .pi))°)")
             print("   📏 viewAspect: \(viewAspect), textureAspect: \(textureAspect)")
             print("   📷 camera: \(deviceType), isFront: \(isFront)")
-            print("   🎭 mirror: \(mirror), hasDepth: \(hasDepth)")
+            print("   🎭 mirror: \(mirror) (mirroring via AVCapture, not shader)")
+            print("   📊 hasDepth: \(hasDepth)")
         }
 
         guard let commandBuffer = queue.makeCommandBuffer() else { return }

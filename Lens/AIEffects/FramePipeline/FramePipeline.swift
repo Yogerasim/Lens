@@ -30,27 +30,38 @@ final class FramePipeline: ObservableObject {
     /// Текущий активный фильтр (меняется из UI)
     var activeFilter: FilterDefinition? = FilterLibrary.shared.filters.first {
         didSet {
-            if let filter = activeFilter {
-                print("🎬 FramePipeline: activeFilter -> \(filter.name), needsDepth=\(filter.needsDepth)")
-                
-                // ⛔️ Блокируем изменение depth policy во время записи
-                if isRecording {
-                    print("⛔️ Ignored depth reconfigure during recording - only shader change allowed")
-                    // Обновляем только шейдер, но не конфигурацию камеры
-                    return
+            guard let filter = activeFilter else { return }
+            
+            // ✅ FIX: Проверяем доступность фильтра для текущей камеры
+            let isFront = cameraManager?.isFrontCamera ?? false
+            if isFront && filter.needsDepth {
+                // Depth фильтр недоступен на фронталке - переключаемся на первый non-depth
+                if let fallback = FilterLibrary.shared.firstNonDepthFilter() {
+                    print("⛔️ Depth filter '\(filter.name)' selected on front camera -> switching to '\(fallback.name)'")
+                    activeFilter = fallback
+                    return // didSet вызовется снова с правильным фильтром
                 }
-                
-                // Вызываем централизованный метод управления depth в CameraManager
-                guard let camera = cameraManager else {
-                    print("⚠️ FramePipeline: No cameraManager reference for depth control")
-                    return
-                }
-                
-                camera.applyDepthPolicy(needsDepth: filter.needsDepth, reason: "activeFilter changed to \(filter.name)")
-                
-                // Обновляем флаг для UI
-                updateDepthModeActive()
             }
+            
+            print("🎬 FramePipeline: activeFilter -> \(filter.name), needsDepth=\(filter.needsDepth)")
+            
+            // ⛔️ Блокируем изменение depth policy во время записи
+            if isRecording {
+                print("⛔️ Ignored depth reconfigure during recording - only shader change allowed")
+                // Обновляем только шейдер, но не конфигурацию камеры
+                return
+            }
+            
+            // Вызываем централизованный метод управления depth в CameraManager
+            guard let camera = cameraManager else {
+                print("⚠️ FramePipeline: No cameraManager reference for depth control")
+                return
+            }
+            
+            camera.applyDepthPolicy(needsDepth: filter.needsDepth, reason: "activeFilter changed to \(filter.name)")
+            
+            // Обновляем флаг для UI
+            updateDepthModeActive()
         }
     }
     

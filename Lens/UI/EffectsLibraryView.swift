@@ -3,11 +3,18 @@ import SwiftUI
 struct EffectsLibraryView: View {
 
     @ObservedObject private var library = FilterLibrary.shared
+    @ObservedObject private var framePipeline = FramePipeline.shared
     let onSelect: (FilterDefinition) -> Void
+    
+    /// Доступные фильтры для текущей камеры
+    private var availableFilters: [FilterDefinition] {
+        let isFront = framePipeline.cameraManager?.isFrontCamera ?? false
+        return library.availableFilters(isFront: isFront)
+    }
 
     var body: some View {
         List {
-            ForEach(library.filters) { filter in
+            ForEach(availableFilters) { filter in
                 Button {
                     onSelect(filter)
                 } label: {

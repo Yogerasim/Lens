@@ -80,25 +80,63 @@ final class ShaderManager: ObservableObject {
     }
     
     /// Переключить на следующий шейдер (свайп влево)
+    /// Пропускает depth фильтры если активна фронтальная камера
     func nextShader() {
-        let allShaders = ShaderType.allCases
-        currentIndex = (currentIndex + 1) % allShaders.count
-        currentShader = allShaders[currentIndex]
-        print("🎨 Switched to: \(currentShader.rawValue)")
+        let isFront = FramePipeline.shared.cameraManager?.isFrontCamera ?? false
+        let availableFilters = FilterLibrary.shared.availableFilters(isFront: isFront)
         
-        // Обновляем depth политику в FramePipeline
-        FramePipeline.shared.setActiveFilter(by: currentShader.fragmentFunctionName)
+        guard !availableFilters.isEmpty else { return }
+        
+        // Находим текущий индекс в доступных фильтрах
+        let currentFilterName = currentShader.fragmentFunctionName
+        let currentAvailableIndex = availableFilters.firstIndex { $0.shaderName == currentFilterName } ?? 0
+        
+        // Переключаемся на следующий доступный
+        let nextIndex = (currentAvailableIndex + 1) % availableFilters.count
+        let nextFilter = availableFilters[nextIndex]
+        
+        // Обновляем текущий шейдер
+        if let shaderIndex = ShaderType.allCases.firstIndex(where: { $0.fragmentFunctionName == nextFilter.shaderName }) {
+            currentIndex = shaderIndex
+            currentShader = ShaderType.allCases[shaderIndex]
+            print("🎨 Switched to: \(currentShader.rawValue)")
+            if isFront {
+                print("   📱 Front camera - depth filters skipped")
+            }
+            
+            // Обновляем depth политику в FramePipeline
+            FramePipeline.shared.setActiveFilter(by: currentShader.fragmentFunctionName)
+        }
     }
     
     /// Переключить на предыдущий шейдер (свайп вправо)
+    /// Пропускает depth фильтры если активна фронтальная камера
     func previousShader() {
-        let allShaders = ShaderType.allCases
-        currentIndex = (currentIndex - 1 + allShaders.count) % allShaders.count
-        currentShader = allShaders[currentIndex]
-        print("🎨 Switched to: \(currentShader.rawValue)")
+        let isFront = FramePipeline.shared.cameraManager?.isFrontCamera ?? false
+        let availableFilters = FilterLibrary.shared.availableFilters(isFront: isFront)
         
-        // Обновляем depth политику в FramePipeline
-        FramePipeline.shared.setActiveFilter(by: currentShader.fragmentFunctionName)
+        guard !availableFilters.isEmpty else { return }
+        
+        // Находим текущий индекс в доступных фильтрах
+        let currentFilterName = currentShader.fragmentFunctionName
+        let currentAvailableIndex = availableFilters.firstIndex { $0.shaderName == currentFilterName } ?? 0
+        
+        // Переключаемся на предыдущий доступный
+        let prevIndex = (currentAvailableIndex - 1 + availableFilters.count) % availableFilters.count
+        let prevFilter = availableFilters[prevIndex]
+        
+        // Обновляем текущий шейдер
+        if let shaderIndex = ShaderType.allCases.firstIndex(where: { $0.fragmentFunctionName == prevFilter.shaderName }) {
+            currentIndex = shaderIndex
+            currentShader = ShaderType.allCases[shaderIndex]
+            print("🎨 Switched to: \(currentShader.rawValue)")
+            if isFront {
+                print("   📱 Front camera - depth filters skipped")
+            }
+            
+            // Обновляем depth политику в FramePipeline
+            FramePipeline.shared.setActiveFilter(by: currentShader.fragmentFunctionName)
+        }
     }
     
     /// Выбрать шейдер по имени fragment функции

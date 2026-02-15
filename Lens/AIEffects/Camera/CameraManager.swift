@@ -236,9 +236,13 @@ final class CameraManager: NSObject, ObservableObject {
             return
         }
         
+        let newPosition: AVCaptureDevice.Position = currentPosition == .back ? .front : .back
+        
+        print("📷 CameraManager: Switching camera...")
+        print("   📍 From: \(currentPosition == .front ? "FRONT" : "BACK")")
+        print("   📍 To: \(newPosition == .front ? "FRONT" : "BACK")")
+        
         sessionQueue.async {
-            let newPosition: AVCaptureDevice.Position = self.currentPosition == .back ? .front : .back
-            
             // Дополнительная проверка на sessionQueue
             if self.isDepthEnabled && newPosition == .front {
                 print("🚫 CameraManager: Front camera blocked in depth mode (sessionQueue)")
@@ -246,6 +250,18 @@ final class CameraManager: NSObject, ObservableObject {
             }
             
             self.switchToDevice(type: .builtInWideAngleCamera, position: newPosition)
+            
+            // ✅ FIX: При переключении на фронталку - проверяем текущий фильтр
+            if newPosition == .front {
+                DispatchQueue.main.async {
+                    // Принудительно обновляем фильтр чтобы сработала валидация
+                    if let currentFilter = FramePipeline.shared.activeFilter, currentFilter.needsDepth {
+                        print("⛔️ CameraManager: Switching to front camera with depth filter active")
+                        // FramePipeline.activeFilter didSet сам переключит на non-depth
+                        FramePipeline.shared.activeFilter = currentFilter
+                    }
+                }
+            }
         }
     }
     
@@ -501,20 +517,28 @@ final class CameraManager: NSObject, ObservableObject {
             return
         }
         
+        // ✅ FIX: Зеркалирование ТОЛЬКО через AVCaptureConnection (единый источник)
+        // Front camera -> зеркалим, Back camera -> не зеркалим
+        let shouldMirror = currentPosition == .front
+        
         if #available(iOS 17.0, *) {
-            connection.videoRotationAngle = 0 // не вращаем буфер, поворот в шейдере
+            // На iOS 17+ используем videoRotationAngle
+            connection.videoRotationAngle = 90 // Portrait orientation
         } else {
             if connection.isVideoOrientationSupported {
-                connection.videoOrientation = .portrait // влияет на метаданные, не на буфер
+                connection.videoOrientation = .portrait
             }
         }
         
-        // Mirror только для фронтальной камеры (но мы делаем это в шейдере)
+        // ✅ FIX: Mirroring только здесь, не в шейдере
         if connection.isVideoMirroringSupported {
-            connection.isVideoMirrored = false
+            connection.isVideoMirrored = shouldMirror
         }
         
         print("✅ CameraManager: Video connection configured")
+        print("   📷 Position: \(currentPosition == .front ? "FRONT" : "BACK")")
+        print("   🔄 Orientation: portrait (90°)")
+        print("   🪞 Mirrored: \(shouldMirror)")
     }
 }
 
@@ -626,6 +650,12 @@ extension CameraManager {
     /// Включает/выключает depth динамически в зависимости от выбранного фильтра
     private func setDepthEnabled(_ enabled: Bool, reason: String) {
         print("🔵 CameraManager: setDepthEnabled(\(enabled)) - \(reason)")
+        
+        // ✅ FIX: Блокируем depth на фронтальной камере
+        if enabled && currentPosition == .front {
+            print("⛔️ CameraManager: Depth requested on front camera, ignoring")
+            return
+        }
         
         // Идемпотентность — если состояние не изменилось, ничего не делаем
         guard enabled != isDepthEnabled else {

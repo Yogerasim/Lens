@@ -44,4 +44,30 @@ final class FilterLibrary: ObservableObject {
     func filter(for shaderName: String) -> FilterDefinition? {
         return filters.first { $0.shaderName == shaderName }
     }
+    
+    /// ✅ FIX: Возвращает доступные фильтры в зависимости от камеры
+    /// - isFront: true если фронтальная камера активна (depth фильтры недоступны)
+    /// - depthSupported: false если устройство не поддерживает depth
+    func availableFilters(isFront: Bool, depthSupported: Bool = true) -> [FilterDefinition] {
+        if isFront || !depthSupported {
+            // На фронталке или без depth support - только non-depth фильтры
+            let available = filters.filter { !$0.needsDepth }
+            print("📚 FilterLibrary: Available filters for \(isFront ? "FRONT" : "BACK") camera: \(available.map { $0.name }.joined(separator: ", "))")
+            return available
+        }
+        return filters
+    }
+    
+    /// Проверяет, доступен ли фильтр для текущей камеры
+    func isFilterAvailable(_ filter: FilterDefinition, isFront: Bool) -> Bool {
+        if isFront && filter.needsDepth {
+            return false
+        }
+        return true
+    }
+    
+    /// Возвращает ближайший доступный non-depth фильтр
+    func firstNonDepthFilter() -> FilterDefinition? {
+        return filters.first { !$0.needsDepth }
+    }
 }
