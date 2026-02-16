@@ -2,6 +2,7 @@ import Metal
 import QuartzCore
 import CoreVideo
 import CoreImage
+import UIKit
 internal import AVFoundation
 
 protocol RenderEngine {
@@ -59,6 +60,11 @@ final class MetalRenderer: RenderEngine {
     // Для троттлинга диагностических принтов
     private var lastDiagnosticPrintTime: CFTimeInterval = 0
     private let diagnosticPrintInterval: CFTimeInterval = 2.0
+    
+    // Для отслеживания изменений и печати при первом кадре после изменения
+    private var lastDrawableSize: CGSize = .zero
+    private var lastBufferSize: (Int, Int) = (0, 0)
+    private var isFirstFrame: Bool = true
 
     // MARK: - Init
     init(layer: CAMetalLayer) {
@@ -154,81 +160,156 @@ final class MetalRenderer: RenderEngine {
         }
 
         // Создаём uniforms с правильной ориентацией
-        let viewAspect = Float(metalLayer.drawableSize.width / metalLayer.drawableSize.height)
+        let drawableW = Float(metalLayer.drawableSize.width)
+        let drawableH = Float(metalLayer.drawableSize.height)
+        let viewAspect = drawableW / drawableH
         let inputWidth = Float(inputTexture.width)
         let inputHeight = Float(inputTexture.height)
-        let textureAspect = inputWidth / inputHeight
+        let textureAspectRaw = inputWidth / inputHeight
         
-        // ✅ FIX: Автоматическое определение rotation по размерам буфера
-        // Если буфер уже portrait (w < h) - не вращаем
-        // Если буфер landscape (w > h) - вращаем на 90°
+        // Размеры буфера для определения rotation
         let bufferWidth = CVPixelBufferGetWidth(pixelBuffer)
         let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
         
+        // ✅ FIX: Rotation определяется по РЕАЛЬНЫМ размерам буфера
         let rotation: Float
-        if bufferWidth < bufferHeight {
-            // Буфер уже portrait (например LiDAR 1080x1920 или iOS 17+ с videoRotationAngle=90) - не вращаем
+        let rotationReason: String
+        
+        if bufferHeight > bufferWidth {
+            // Буфер уже portrait (iPad 3024x4032, LiDAR 1080x1920) - НЕ вращаем
             rotation = 0.0
-        } else {
-            // Буфер landscape (обычная камера 3840x2160) - вращаем на 90°
+            rotationReason = "portrait-buffer (h>w) => 0°"
+        } else if bufferWidth > bufferHeight {
+            // Буфер landscape (iPhone 3840x2160) - вращаем на 90°
             rotation = Float.pi / 2.0
+            rotationReason = "landscape-buffer (w>h) => 90°"
+        } else {
+            rotation = 0.0
+            rotationReason = "square-buffer => 0°"
         }
         
-        // ✅ FIX: Mirror теперь ТОЛЬКО через AVCaptureConnection, не в шейдере
-        // Это исключает двойное зеркалирование
+        // ✅ FIX: Вычисляем effectiveTextureAspect с учётом rotation
+        let isRotated90 = abs(sin(rotation)) > 0.9
+        let effectiveTextureAspect: Float
+        if isRotated90 {
+            effectiveTextureAspect = 1.0 / textureAspectRaw
+        } else {
+            effectiveTextureAspect = textureAspectRaw
+        }
+        
+        // ✅ FIX: Aspect-FILL через UV-crop (не через масштабирование геометрии!)
+        // uvScale < 1 означает "обрезать эту ось текстуры"
+        let uvScaleX: Float
+        let uvScaleY: Float
+        
+        if effectiveTextureAspect > viewAspect {
+            // Текстура "шире" экрана → обрезаем по X (uvScaleX < 1)
+            uvScaleX = viewAspect / effectiveTextureAspect
+            uvScaleY = 1.0
+        } else {
+            // Текстура "уже" экрана → обрезаем по Y (uvScaleY < 1)
+            uvScaleX = 1.0
+            uvScaleY = effectiveTextureAspect / viewAspect
+        }
+        
+        // Mirror через AVCaptureConnection, не в шейдере
         let mirror: Float = 0.0
         
-        // ✅ FIX: Depth UV коррекция для LiDAR режима
-        // LiDAR depth map имеет другую ориентацию чем RGB - нужен flip
+        // Depth UV коррекция для LiDAR режима
         let isLiDARMode = cameraManager?.isDepthEnabled ?? false
-        let depthFlipX: Float = 0.0  // Обычно X не нужно флипать
-        let depthFlipY: Float = isLiDARMode ? 1.0 : 0.0  // Флипаем Y в LiDAR режиме
+        let depthFlipX: Float = 0.0
+        let depthFlipY: Float = isLiDARMode ? 1.0 : 0.0
         
-        // ✅ Effect intensity (smoothed, 0.0 = passthrough, 1.0 = full effect)
+        // Effect intensity
         let intensity = FramePipeline.shared.effectIntensityForMetal
 
         var uniforms = ShaderUniforms(
             time: shaderManager.animationTime,
             viewAspect: viewAspect,
-            textureAspect: textureAspect,
+            textureAspect: textureAspectRaw,
             rotation: rotation,
             mirror: mirror,
             hasDepth: hasDepth,
             depthFlipX: depthFlipX,
             depthFlipY: depthFlipY,
-            intensity: intensity
+            intensity: intensity,
+            effectiveTextureAspect: effectiveTextureAspect,
+            uvScaleX: uvScaleX,
+            uvScaleY: uvScaleY
         )
         
-        // Диагностические принты с троттлингом (раз в 2 секунды)
+        // ✅ Проверяем изменения для печати при смене ориентации/камеры
+        let currentDrawableSize = metalLayer.drawableSize
+        let currentBufferSize = (bufferWidth, bufferHeight)
+        let orientationChanged = currentDrawableSize != lastDrawableSize
+        let cameraChanged = currentBufferSize != lastBufferSize
+        let shouldPrintDiagnostic = isFirstFrame || orientationChanged || cameraChanged
+        
+        if shouldPrintDiagnostic {
+            lastDrawableSize = currentDrawableSize
+            lastBufferSize = currentBufferSize
+            isFirstFrame = false
+            
+            let rotationDegrees = Int(rotation * 180 / .pi)
+            let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
+            let isFront = cameraManager?.isFrontCamera ?? false
+            let deviceIdiom = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+            let contentsScale = metalLayer.contentsScale
+            let isDepthEnabled = cameraManager?.isDepthEnabled ?? false
+            let boundsW = metalLayer.frame.width
+            let boundsH = metalLayer.frame.height
+            
+            let changeReason = isFirstFrame ? "FIRST_FRAME" : (orientationChanged ? "ORIENTATION_CHANGED" : "CAMERA_CHANGED")
+            
+            print("🔄 MetalRenderer [\(deviceIdiom)] — \(changeReason):")
+            print("   📐 bounds (points): \(Int(boundsW))x\(Int(boundsH))")
+            print("   🔍 contentsScale: \(String(format: "%.1f", contentsScale))")
+            print("   📏 drawableSize (pixels): \(Int(drawableW))x\(Int(drawableH))")
+            print("   📊 viewAspect: \(String(format: "%.4f", viewAspect))")
+            print("   🖼️ inputBuffer: \(bufferWidth)x\(bufferHeight)")
+            print("   📊 textureAspectRaw: \(String(format: "%.4f", textureAspectRaw))")
+            print("   🔄 rotation: \(rotationDegrees)° — \(rotationReason)")
+            print("   ✅ effectiveTextureAspect: \(String(format: "%.4f", effectiveTextureAspect))")
+            print("   🎯 UV-crop: uvScaleX=\(String(format: "%.4f", uvScaleX)), uvScaleY=\(String(format: "%.4f", uvScaleY))")
+            print("   📷 camera: \(deviceType), isFront: \(isFront), depth: \(isDepthEnabled)")
+        }
+        
+        // Дополнительная периодическая диагностика (раз в 2 секунды)
         let now = CACurrentMediaTime()
         if now - lastDiagnosticPrintTime > diagnosticPrintInterval {
             lastDiagnosticPrintTime = now
             
-            // Логируем автоматический rotation
-            print("🧭 AutoRotation: w=\(bufferWidth) h=\(bufferHeight) rotation=\(rotation == 0 ? "0 (portrait)" : "π/2 (landscape)") hasDepth=\(hasDepth)")
+            let rotationDegrees = Int(rotation * 180 / .pi)
+            let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
+            let isFront = cameraManager?.isFrontCamera ?? false
+            let deviceIdiom = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+            let contentsScale = metalLayer.contentsScale
+            let isDepthEnabled = cameraManager?.isDepthEnabled ?? false
             
-            // Логируем depth flip флаги
-            print("🧪 DepthFlip: depthFlipX=\(depthFlipX) depthFlipY=\(depthFlipY) isLiDARMode=\(isLiDARMode)")
+            // Bounds в points (из frame)
+            let boundsW = metalLayer.frame.width
+            let boundsH = metalLayer.frame.height
             
-            // Логируем intensity
-            print("🎚️ Effect intensity: \(String(format: "%.2f", intensity))")
+            print("🔍 MetalRenderer diagnostic [\(deviceIdiom)]:")
+            print("   📐 bounds (points): \(Int(boundsW))x\(Int(boundsH))")
+            print("   🔍 contentsScale: \(String(format: "%.1f", contentsScale))")
+            print("   📏 drawableSize (pixels): \(Int(drawableW))x\(Int(drawableH))")
+            print("   📊 viewAspect: \(String(format: "%.4f", viewAspect))")
+            print("   🖼️ inputBuffer: \(bufferWidth)x\(bufferHeight)")
+            print("   📊 textureAspectRaw: \(String(format: "%.4f", textureAspectRaw))")
+            print("   🔄 rotation: \(rotationDegrees)° — \(rotationReason)")
+            print("   ✅ effectiveTextureAspect: \(String(format: "%.4f", effectiveTextureAspect))")
+            print("   🎯 UV-crop: uvScaleX=\(String(format: "%.4f", uvScaleX)), uvScaleY=\(String(format: "%.4f", uvScaleY))")
+            print("   📷 camera: \(deviceType), isFront: \(isFront), depth: \(isDepthEnabled)")
+            print("   🎭 mirror: \(mirror), hasDepth: \(hasDepth)")
+            print("   🎚️ intensity: \(String(format: "%.2f", intensity))")
             
-            // Логируем размеры depth если есть
+            // Логируем depth если есть
             if let depthBuffer = depthPixelBuffer {
                 let depthW = CVPixelBufferGetWidth(depthBuffer)
                 let depthH = CVPixelBufferGetHeight(depthBuffer)
-                print("📊 DepthBuffer size: \(depthW)x\(depthH)")
+                print("   📊 depthBuffer: \(depthW)x\(depthH), flipY=\(depthFlipY)")
             }
-            
-            let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
-            let isFront = cameraManager?.isFrontCamera ?? false
-            print("🔍 MetalRenderer diagnostic:")
-            print("   📐 inputTexture: \(Int(inputWidth))x\(Int(inputHeight))")
-            print("   🔄 rotation: \(rotation) rad (\(Int(rotation * 180 / .pi))°)")
-            print("   📏 viewAspect: \(viewAspect), textureAspect: \(textureAspect)")
-            print("   📷 camera: \(deviceType), isFront: \(isFront)")
-            print("   🎭 mirror: \(mirror) (mirroring via AVCapture, not shader)")
-            print("   📊 hasDepth: \(hasDepth)")
         }
 
         guard let commandBuffer = queue.makeCommandBuffer() else { return }

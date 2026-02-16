@@ -6,12 +6,15 @@ struct Uniforms {
     float time;
     float viewAspect;
     float textureAspect;
-    float rotation;    // поворот в радианах
-    float mirror;      // зеркалирование (0.0 или 1.0)
-    float hasDepth;    // есть ли depth данные (0.0 или 1.0)
-    float depthFlipX;  // 1.0 = flip X для depth UV
-    float depthFlipY;  // 1.0 = flip Y для depth UV
-    float intensity;   // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
+    float rotation;             // поворот в радианах
+    float mirror;               // зеркалирование (0.0 или 1.0)
+    float hasDepth;             // есть ли depth данные (0.0 или 1.0)
+    float depthFlipX;           // 1.0 = flip X для depth UV
+    float depthFlipY;           // 1.0 = flip Y для depth UV
+    float intensity;            // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
+    float effectiveTextureAspect;  // aspect с учётом rotation (вычислен в Swift)
+    float uvScaleX;             // UV crop scale X для aspect-fill (<=1.0)
+    float uvScaleY;             // UV crop scale Y для aspect-fill (<=1.0)
 };
 
 // MARK: - Vertex Output
@@ -25,7 +28,7 @@ vertex VertexOut vertex_main(
     uint vid [[vertex_id]],
     constant Uniforms &uniforms [[buffer(0)]]
 ) {
-    // Базовый fullscreen quad (-1..1)
+    // Базовый fullscreen quad (-1..1) — БЕЗ масштабирования позиций
     float2 basePos[4] = {
         {-1, -1}, {1, -1},
         {-1,  1}, {1,  1}
@@ -37,8 +40,14 @@ vertex VertexOut vertex_main(
         {0, 1}, {1, 1}
     };
 
-    // 1) Поворот UV вокруг центра (mirroring делается через AVCapture)
     float2 uv = baseUV[vid];
+    
+    // 1) Aspect-FILL через UV-crop (обрезаем края текстуры, не масштабируем геометрию)
+    // uvScaleX/uvScaleY вычислены в Swift: значение < 1 означает "обрезать эту ось"
+    // Применяем crop вокруг центра UV
+    uv = (uv - 0.5) * float2(uniforms.uvScaleX, uniforms.uvScaleY) + 0.5;
+    
+    // 2) Поворот UV вокруг центра
     float2 centeredUV = uv - 0.5;
     float cosR = cos(uniforms.rotation);
     float sinR = sin(uniforms.rotation);
@@ -46,29 +55,9 @@ vertex VertexOut vertex_main(
     rotUV.x = centeredUV.x * cosR - centeredUV.y * sinR;
     rotUV.y = centeredUV.x * sinR + centeredUV.y * cosR;
     rotUV += 0.5;
-    // ✅ FIX: Manual mirror убран - mirroring происходит на уровне AVCapture
 
-    // 2) Aspect-fill через масштаб геометрии (позиции), НЕ UV
-    // Эффективное соотношение сторон текстуры с учётом поворота: если повёрнута на 90°/270°, меняем местами
-    float effectiveTextureAspect = uniforms.textureAspect;
-    
-    // Надёжная проверка на поворот 90°/270° через sin
-    // sin(π/2) = 1, sin(-π/2) = -1, sin(3π/2) = -1, sin(0) = 0, sin(π) = 0
-    // Если |sin(rotation)| > 0.9 — значит повёрнуто на ~90°
-    bool isRotated90 = abs(sin(uniforms.rotation)) > 0.9f;
-    if (isRotated90) {
-        effectiveTextureAspect = 1.0 / effectiveTextureAspect;
-    }
-
-    float viewAspect = uniforms.viewAspect;
-    float2 scale = float2(1.0, 1.0);
-    if (effectiveTextureAspect > viewAspect) {
-        scale.y = effectiveTextureAspect / viewAspect;  // scale > 1, заполняет по Y
-    } else {
-        scale.x = viewAspect / effectiveTextureAspect;  // scale > 1, заполняет по X
-    }
-
-    float2 pos = basePos[vid] * scale;
+    // 3) Позиция — fullscreen quad без масштабирования
+    float2 pos = basePos[vid];
 
     VertexOut out;
     out.position = float4(pos, 0, 1);

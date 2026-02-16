@@ -7,6 +7,7 @@ struct CameraCanvasView: View {
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var framePipeline = FramePipeline.shared
+    @ObservedObject var orientationManager = OrientationManager.shared  // ✅ Добавлен для iPad fix
 
     @Binding var pinchStartZoom: CGFloat
     
@@ -27,6 +28,12 @@ struct CameraCanvasView: View {
             MetalView(renderer: renderer)
                 .aspectRatio(9.0 / 16.0, contentMode: .fit)
                 .gesture(combinedGestures)
+                .onReceive(orientationManager.$currentOrientation) { newOrientation in
+                    // Логируем изменения размера drawable при смене ориентации
+                    let width = Int(renderer.metalLayer.drawableSize.width)
+                    let height = Int(renderer.metalLayer.drawableSize.height)
+                    print("📐 CameraCanvasView: Orientation changed, drawable=\(width)x\(height)")
+                }
             
             // Glass Intensity HUD (слева)
             HStack {
@@ -141,4 +148,3 @@ struct CameraCanvasView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 }
-

@@ -1,6 +1,7 @@
 import CoreMedia
 import Combine
 import QuartzCore
+import UIKit
 internal import AVFoundation
 
 // MARK: - Filter Family (для блокировки при записи)
@@ -22,6 +23,13 @@ final class FramePipeline: ObservableObject {
     
     /// Флаг для UI: depth режим активен (фронтальная камера недоступна)
     @Published private(set) var isDepthModeActive: Bool = false
+    
+    // MARK: - Orientation Management for iPad
+    /// Текущий угол поворота интерфейса (в радианах) для Metal uniforms
+    @Published var interfaceRotation: Float = 0.0
+    
+    /// Cancellable для подписки на изменения ориентации
+    private var orientationCancellable: AnyCancellable?
     
     // MARK: - Recording State
     /// Флаг записи — блокирует изменение конфигурации камеры/depth
@@ -82,7 +90,7 @@ final class FramePipeline: ObservableObject {
                 if filterFamily != family {
                     print("⛔️ Filter '\(filter.name)' blocked during recording (locked to \(family.rawValue) filters)")
                     // Откатываемся на предыдущий допустимый фильтр
-                    if let fallback = FilterLibrary.shared.filters.first(where: { 
+                    if let fallback = FilterLibrary.shared.filters.first(where: {
                         ($0.needsDepth && family == .depth) || (!$0.needsDepth && family == .nonDepth)
                     }) {
                         activeFilter = fallback
@@ -261,6 +269,15 @@ final class FramePipeline: ObservableObject {
         print("📱 Device: \(DeviceCapabilities.current.modelName)")
         print("📹 Max FPS: \(DeviceCapabilities.current.maxFPS)")
         print("🎬 FramePipeline: Initialized with filter '\(activeFilter?.name ?? "none")'")
+        
+        // MARK: - Orientation Management for iPad
+        // Подписываемся на изменения ориентации из OrientationManager
+        orientationCancellable = OrientationManager.shared.$rotationAngle
+            .sink { [weak self] newRotation in
+                self?.interfaceRotation = newRotation
+                let degrees = Int(newRotation * 180 / .pi)
+                print("🧭 FramePipeline: interfaceRotation updated = \(degrees)°")
+            }
     }
     
     /// Метод для обновления activeFilter из ShaderManager

@@ -40,12 +40,15 @@ struct ShaderUniforms {
     var time: Float
     var viewAspect: Float
     var textureAspect: Float
-    var rotation: Float      // поворот в радианах (0, π/2, π, 3π/2)
-    var mirror: Float        // зеркалирование (0.0 или 1.0)
-    var hasDepth: Float      // есть ли depth данные (0.0 или 1.0)
-    var depthFlipX: Float    // 1.0 = flip X для depth UV, 0.0 = no flip
-    var depthFlipY: Float    // 1.0 = flip Y для depth UV, 0.0 = no flip
-    var intensity: Float     // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
+    var rotation: Float              // поворот в радианах (0, π/2, π, 3π/2)
+    var mirror: Float                // зеркалирование (0.0 или 1.0)
+    var hasDepth: Float              // есть ли depth данные (0.0 или 1.0)
+    var depthFlipX: Float            // 1.0 = flip X для depth UV, 0.0 = no flip
+    var depthFlipY: Float            // 1.0 = flip Y для depth UV, 0.0 = no flip
+    var intensity: Float             // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
+    var effectiveTextureAspect: Float // aspect с учётом rotation (вычисляется в Swift)
+    var uvScaleX: Float              // UV crop scale X для aspect-fill (<=1.0)
+    var uvScaleY: Float              // UV crop scale Y для aspect-fill (<=1.0)
 }
 
 // MARK: - Shader Manager
