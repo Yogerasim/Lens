@@ -27,6 +27,7 @@ struct CameraOverlay: View {
     @ObservedObject var framePipeline = FramePipeline.shared
     
     @State private var isMediaHubPresented = false
+    @State private var isVoiceComposerPresented = false
     @State private var isFlashing = false
 
     var body: some View {
@@ -61,7 +62,7 @@ struct CameraOverlay: View {
             
             .sheet(isPresented: $isMediaHubPresented) {
                 MediaHubTabView(
-                    onClose: { 
+                    onClose: {
                         isMediaHubPresented = false
                         print("📱 MediaHub closed")
                     },
@@ -70,6 +71,15 @@ struct CameraOverlay: View {
                         shaderManager.selectShader(by: filter.shaderName)
                         print("🎨 Selected filter: \(filter.name), shader: \(filter.shaderName), needsDepth: \(filter.needsDepth)")
                     }
+                )
+            }
+            
+            .sheet(isPresented: $isVoiceComposerPresented) {
+                VoiceComposerView(
+                    cameraManager: cameraManager,
+                    shaderManager: shaderManager,
+                    mediaRecorder: mediaRecorder,
+                    framePipeline: framePipeline
                 )
             }
     }
@@ -118,15 +128,22 @@ struct CameraOverlay: View {
                 .offset(x: switchCamOffset.x, y: switchCamOffset.y)
             }
 
+            // Кнопка эффектов/голосового управления
+            // tap: Voice Composer, long press: Media Hub
             Button {
-                isMediaHubPresented = true
+                isVoiceComposerPresented = true
             } label: {
                 Image(systemName: "wand.and.stars")
                     .font(.title2)
                     .foregroundColor(.white)
                     .glassCircle(size: 54)
             }
-            
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in
+                        isMediaHubPresented = true
+                    }
+            )
             .offset(x: effectsOffset.x, y: effectsOffset.y)
         }
         .padding(Edge.Set.bottom, 8) // аналогично — аккуратно отступить от края

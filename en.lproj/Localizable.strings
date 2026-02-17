@@ -1,0 +1,69 @@
+/* Localizable.strings - English (en) */
+
+/* MARK: - General UI */
+"fps_label" = "FPS: %d";
+"render_pipeline_active" = "RENDER PIPELINE ACTIVE";
+
+/* MARK: - Camera Controls */
+"switch_camera" = "Switch Camera";
+"take_photo" = "Take Photo";
+"start_recording" = "Start Recording";
+"stop_recording" = "Stop Recording";
+"photo_mode" = "PHOTO";
+"video_mode" = "VIDEO";
+
+/* MARK: - Effects and Filters */
+"comic_style" = "Comic Style";
+"tech_lines" = "Tech Lines";
+"acid_trip" = "Acid Trip";
+"neural_painter" = "Neural Painter";
+"depth_fog" = "Depth Fog";
+"depth_outline" = "Depth Outline";
+
+"effects_library" = "Effects Library";
+"locked_to_depth_filters" = "Locked to DEPTH filters";
+"locked_to_non_depth_filters" = "Locked to NON-DEPTH filters";
+"uses_lidar" = "Uses LiDAR";
+
+/* MARK: - Zoom Controls */
+"zoom_0_5x" = "0.5×";
+"zoom_1x" = "1×";
+"zoom_2x" = "2×";
+
+/* MARK: - Recording */
+"recording_time_format" = "%02d:%02d";
+"recording_locked_depth" = "Recording locked to DEPTH filters";
+"recording_locked_non_depth" = "Recording locked to NON-DEPTH filters";
+
+/* MARK: - Media Hub */
+"media_hub" = "Media Hub";
+"effects_tab" = "Effects";
+"recordings_tab" = "Recordings";
+"close" = "Close";
+
+/* MARK: - Intensity Control */
+"intensity_label" = "%d%%";
+"effect_intensity" = "Effect Intensity";
+
+/* MARK: - Permissions */
+"camera_permission_title" = "Camera Access";
+"camera_permission_message" = "Lens needs camera access to apply real-time filters";
+"microphone_permission_title" = "Microphone Access";
+"microphone_permission_message" = "Lens needs microphone access to record video with sound";
+"photo_library_permission_title" = "Photo Library Access";
+"photo_library_permission_message" = "Lens needs access to save photos and videos to your library";
+
+/* MARK: - Error Messages */
+"error_camera_unavailable" = "Camera unavailable";
+"error_microphone_unavailable" = "Microphone unavailable";
+"error_recording_failed" = "Recording failed";
+"error_photo_save_failed" = "Failed to save photo";
+
+/* MARK: - Device Capabilities */
+"depth_supported" = "Supports Depth";
+"depth_not_supported" = "Depth not supported";
+"lidar_camera" = "LiDAR Camera";
+"wide_camera" = "Wide Camera";
+"ultra_wide_camera" = "Ultra Wide Camera";
+"telephoto_camera" = "Telephoto Camera";
+"front_camera" = "Front Camera";

@@ -5,9 +5,11 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Lens needs camera access to apply real-time filters</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Lens needs microphone access to record video with sound</string>
+	<string>Lens needs microphone access to record video with sound and voice commands</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Lens needs access to save photos and videos to your library</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Lens needs speech recognition to process voice commands for controlling effects</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>

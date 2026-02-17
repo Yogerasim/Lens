@@ -1,0 +1,69 @@
+/* Localizable.strings - Russian (ru) */
+
+/* MARK: - General UI */
+"fps_label" = "FPS: %d";
+"render_pipeline_active" = "RENDER PIPELINE ACTIVE";
+
+/* MARK: - Camera Controls */
+"switch_camera" = "Переключить камеру";
+"take_photo" = "Сделать фото";
+"start_recording" = "Начать запись";
+"stop_recording" = "Остановить запись";
+"photo_mode" = "ФОТО";
+"video_mode" = "ВИДЕО";
+
+/* MARK: - Effects and Filters */
+"comic_style" = "Комикс стиль";
+"tech_lines" = "Техно линии";
+"acid_trip" = "Кислотный трип";
+"neural_painter" = "Нейро художник";
+"depth_fog" = "Туман глубины";
+"depth_outline" = "Контуры глубины";
+
+"effects_library" = "Библиотека эффектов";
+"locked_to_depth_filters" = "Заблокировано на DEPTH фильтрах";
+"locked_to_non_depth_filters" = "Заблокировано на НЕ-DEPTH фильтрах";
+"uses_lidar" = "Использует LiDAR";
+
+/* MARK: - Zoom Controls */
+"zoom_0_5x" = "0.5×";
+"zoom_1x" = "1×";
+"zoom_2x" = "2×";
+
+/* MARK: - Recording */
+"recording_time_format" = "%02d:%02d";
+"recording_locked_depth" = "Запись заблокирована на DEPTH фильтрах";
+"recording_locked_non_depth" = "Запись заблокирована на НЕ-DEPTH фильтрах";
+
+/* MARK: - Media Hub */
+"media_hub" = "Медиа хаб";
+"effects_tab" = "Эффекты";
+"recordings_tab" = "Записи";
+"close" = "Закрыть";
+
+/* MARK: - Intensity Control */
+"intensity_label" = "%d%%";
+"effect_intensity" = "Сила эффекта";
+
+/* MARK: - Permissions */
+"camera_permission_title" = "Доступ к камере";
+"camera_permission_message" = "Lens нужен доступ к камере для применения фильтров в реальном времени";
+"microphone_permission_title" = "Доступ к микрофону";
+"microphone_permission_message" = "Lens нужен доступ к микрофону для записи видео со звуком";
+"photo_library_permission_title" = "Доступ к фототеке";
+"photo_library_permission_message" = "Lens нужен доступ для сохранения фото и видео в вашу библиотеку";
+
+/* MARK: - Error Messages */
+"error_camera_unavailable" = "Камера недоступна";
+"error_microphone_unavailable" = "Микрофон недоступна";
+"error_recording_failed" = "Ошибка записи";
+"error_photo_save_failed" = "Ошибка сохранения фото";
+
+/* MARK: - Device Capabilities */
+"depth_supported" = "Поддерживает глубину";
+"depth_not_supported" = "Не поддерживает глубину";
+"lidar_camera" = "LiDAR камера";
+"wide_camera" = "Основная камера";
+"ultra_wide_camera" = "Сверхширокая камера";
+"telephoto_camera" = "Телефото камера";
+"front_camera" = "Фронтальная камера";

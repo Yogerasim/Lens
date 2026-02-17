@@ -1,0 +1,69 @@
+/* Localizable.strings - Chinese Simplified (zh-Hans) */
+
+/* MARK: - General UI */
+"fps_label" = "FPS: %d";
+"render_pipeline_active" = "渲染管线激活";
+
+/* MARK: - Camera Controls */
+"switch_camera" = "切换摄像头";
+"take_photo" = "拍照";
+"start_recording" = "开始录制";
+"stop_recording" = "停止录制";
+"photo_mode" = "照片";
+"video_mode" = "视频";
+
+/* MARK: - Effects and Filters */
+"comic_style" = "漫画风格";
+"tech_lines" = "科技线条";
+"acid_trip" = "迷幻之旅";
+"neural_painter" = "神经画家";
+"depth_fog" = "深度雾化";
+"depth_outline" = "深度轮廓";
+
+"effects_library" = "效果库";
+"locked_to_depth_filters" = "锁定为深度滤镜";
+"locked_to_non_depth_filters" = "锁定为非深度滤镜";
+"uses_lidar" = "使用 LiDAR";
+
+/* MARK: - Zoom Controls */
+"zoom_0_5x" = "0.5×";
+"zoom_1x" = "1×";
+"zoom_2x" = "2×";
+
+/* MARK: - Recording */
+"recording_time_format" = "%02d:%02d";
+"recording_locked_depth" = "录制锁定为深度滤镜";
+"recording_locked_non_depth" = "录制锁定为非深度滤镜";
+
+/* MARK: - Media Hub */
+"media_hub" = "媒体中心";
+"effects_tab" = "效果";
+"recordings_tab" = "录制";
+"close" = "关闭";
+
+/* MARK: - Intensity Control */
+"intensity_label" = "%d%%";
+"effect_intensity" = "效果强度";
+
+/* MARK: - Permissions */
+"camera_permission_title" = "摄像头权限";
+"camera_permission_message" = "Lens 需要摄像头权限来应用实时滤镜";
+"microphone_permission_title" = "麦克风权限";
+"microphone_permission_message" = "Lens 需要麦克风权限来录制带声音的视频";
+"photo_library_permission_title" = "照片库权限";
+"photo_library_permission_message" = "Lens 需要权限来保存照片和视频到您的图库";
+
+/* MARK: - Error Messages */
+"error_camera_unavailable" = "摄像头不可用";
+"error_microphone_unavailable" = "麦克风不可用";
+"error_recording_failed" = "录制失败";
+"error_photo_save_failed" = "照片保存失败";
+
+/* MARK: - Device Capabilities */
+"depth_supported" = "支持深度";
+"depth_not_supported" = "不支持深度";
+"lidar_camera" = "LiDAR 摄像头";
+"wide_camera" = "广角摄像头";
+"ultra_wide_camera" = "超广角摄像头";
+"telephoto_camera" = "长焦摄像头";
+"front_camera" = "前置摄像头";

@@ -1,0 +1,69 @@
+/* Localizable.strings - Spanish (es) */
+
+/* MARK: - General UI */
+"fps_label" = "FPS: %d";
+"render_pipeline_active" = "PIPELINE DE RENDERIZADO ACTIVO";
+
+/* MARK: - Camera Controls */
+"switch_camera" = "Cambiar Cámara";
+"take_photo" = "Tomar Foto";
+"start_recording" = "Iniciar Grabación";
+"stop_recording" = "Detener Grabación";
+"photo_mode" = "FOTO";
+"video_mode" = "VÍDEO";
+
+/* MARK: - Effects and Filters */
+"comic_style" = "Estilo Cómic";
+"tech_lines" = "Líneas Tech";
+"acid_trip" = "Viaje Ácido";
+"neural_painter" = "Pintor Neural";
+"depth_fog" = "Niebla de Profundidad";
+"depth_outline" = "Contornos de Profundidad";
+
+"effects_library" = "Biblioteca de Efectos";
+"locked_to_depth_filters" = "Bloqueado a filtros de PROFUNDIDAD";
+"locked_to_non_depth_filters" = "Bloqueado a filtros SIN PROFUNDIDAD";
+"uses_lidar" = "Usa LiDAR";
+
+/* MARK: - Zoom Controls */
+"zoom_0_5x" = "0.5×";
+"zoom_1x" = "1×";
+"zoom_2x" = "2×";
+
+/* MARK: - Recording */
+"recording_time_format" = "%02d:%02d";
+"recording_locked_depth" = "Grabación bloqueada a filtros de PROFUNDIDAD";
+"recording_locked_non_depth" = "Grabación bloqueada a filtros SIN PROFUNDIDAD";
+
+/* MARK: - Media Hub */
+"media_hub" = "Centro de Medios";
+"effects_tab" = "Efectos";
+"recordings_tab" = "Grabaciones";
+"close" = "Cerrar";
+
+/* MARK: - Intensity Control */
+"intensity_label" = "%d%%";
+"effect_intensity" = "Intensidad del Efecto";
+
+/* MARK: - Permissions */
+"camera_permission_title" = "Acceso a Cámara";
+"camera_permission_message" = "Lens necesita acceso a la cámara para aplicar filtros en tiempo real";
+"microphone_permission_title" = "Acceso a Micrófono";
+"microphone_permission_message" = "Lens necesita acceso al micrófono para grabar vídeo con sonido";
+"photo_library_permission_title" = "Acceso a Biblioteca de Fotos";
+"photo_library_permission_message" = "Lens necesita acceso para guardar fotos y vídeos en tu biblioteca";
+
+/* MARK: - Error Messages */
+"error_camera_unavailable" = "Cámara no disponible";
+"error_microphone_unavailable" = "Micrófono no disponible";
+"error_recording_failed" = "Error de grabación";
+"error_photo_save_failed" = "Error al guardar foto";
+
+/* MARK: - Device Capabilities */
+"depth_supported" = "Soporta Profundidad";
+"depth_not_supported" = "No soporta profundidad";
+"lidar_camera" = "Cámara LiDAR";
+"wide_camera" = "Cámara Principal";
+"ultra_wide_camera" = "Cámara Ultra Ancha";
+"telephoto_camera" = "Cámara Teleobjetivo";
+"front_camera" = "Cámara Frontal";
