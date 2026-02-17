@@ -3,7 +3,7 @@ import CoreVideo
 import CoreMedia
 
 protocol FrameConsumer: AnyObject {
-    func consume(pixelBuffer: CVPixelBuffer, time: CMTime)
+    func consume(_ packet: FramePacket)
 }
 
 final class FrameGate {
@@ -38,7 +38,7 @@ final class FrameGate {
     }
 
     // MARK: - Public API
-    func push(pixelBuffer: CVPixelBuffer, time: CMTime) {
+    func push(_ packet: FramePacket) {
         gateQueue.async {
             // Drop if busy
             if self.isProcessing {
@@ -47,7 +47,7 @@ final class FrameGate {
 
             // Drop if too early
             if self.lastFrameTime != .zero {
-                let delta = CMTimeSubtract(time, self.lastFrameTime)
+                let delta = CMTimeSubtract(packet.time, self.lastFrameTime)
                 if delta < self.minFrameInterval {
                     return
                 }
@@ -55,9 +55,9 @@ final class FrameGate {
 
             // Accept frame
             self.isProcessing = true
-            self.lastFrameTime = time
+            self.lastFrameTime = packet.time
 
-            self.consumer?.consume(pixelBuffer: pixelBuffer, time: time)
+            self.consumer?.consume(packet)
         }
     }
 

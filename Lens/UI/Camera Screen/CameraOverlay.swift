@@ -24,6 +24,7 @@ struct CameraOverlay: View {
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var mediaRecorder: MediaRecorder
     @ObservedObject var fps: FPSCounter
+    @ObservedObject var framePipeline = FramePipeline.shared
     
     @State private var isMediaHubPresented = false
     @State private var isFlashing = false
@@ -60,11 +61,14 @@ struct CameraOverlay: View {
             
             .sheet(isPresented: $isMediaHubPresented) {
                 MediaHubTabView(
-                    onClose: { isMediaHubPresented = false },
-                    onSelectEffect: { effect in
-                        // позже сюда подключим применение эффекта в камере:
-                        // например shaderManager.select(by: effect.shaderKey)
-                        print("Selected effect:", effect.shaderKey)
+                    onClose: { 
+                        isMediaHubPresented = false
+                        print("📱 MediaHub closed")
+                    },
+                    onSelectEffect: { filter in
+                        // Применяем выбранный фильтр
+                        shaderManager.selectShader(by: filter.shaderName)
+                        print("🎨 Selected filter: \(filter.name), shader: \(filter.shaderName), needsDepth: \(filter.needsDepth)")
                     }
                 )
             }
@@ -103,13 +107,16 @@ struct CameraOverlay: View {
                 .offset(x: modeOffset.x, y: modeOffset.y)
                 .zIndex(10)
 
-            Button { cameraManager.switchCamera() } label: {
-                Image(systemName: "camera.rotate.fill")
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .glassCircle(size: 54)
+            // Кнопка переключения камеры - скрыта в depth режиме
+            if !framePipeline.isDepthModeActive {
+                Button { cameraManager.switchCamera() } label: {
+                    Image(systemName: "camera.rotate.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .glassCircle(size: 54)
+                }
+                .offset(x: switchCamOffset.x, y: switchCamOffset.y)
             }
-            .offset(x: switchCamOffset.x, y: switchCamOffset.y)
 
             Button {
                 isMediaHubPresented = true

@@ -2,16 +2,42 @@ import SwiftUI
 
 struct EffectsLibraryView: View {
 
-    @EnvironmentObject private var store: AppMediaStore
-    let onSelect: (EffectItem) -> Void
+    @ObservedObject private var library = FilterLibrary.shared
+    @ObservedObject private var framePipeline = FramePipeline.shared
+    let onSelect: (FilterDefinition) -> Void
+    
+    /// Доступные фильтры для текущей камеры и режима записи
+    private var availableFilters: [FilterDefinition] {
+        let isFront = framePipeline.cameraManager?.isFrontCamera ?? false
+        let isRecording = framePipeline.isRecording
+        let recordingFamily = framePipeline.recordingFilterFamily
+        
+        return library.availableFilters(
+            isFront: isFront,
+            recordingFamily: recordingFamily,
+            isRecording: isRecording
+        )
+    }
 
     var body: some View {
         List {
-            ForEach(store.effects) { effect in
+            // Показываем сообщение о блокировке при записи
+            if framePipeline.isRecording, let family = framePipeline.recordingFilterFamily {
+                HStack {
+                    Image(systemName: "record.circle.fill")
+                        .foregroundColor(.red)
+                    Text("Locked to \(family.rawValue) filters")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .listRowBackground(Color.clear)
+            }
+            
+            ForEach(availableFilters) { filter in
                 Button {
-                    onSelect(effect)
+                    onSelect(filter)
                 } label: {
-                    EffectRow(effect: effect)
+                    EffectRow(filter: filter)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(DesignSystem.Colors.background)
@@ -24,7 +50,7 @@ struct EffectsLibraryView: View {
 }
 
 private struct EffectRow: View {
-    let effect: EffectItem
+    let filter: FilterDefinition
 
     var body: some View {
         HStack(spacing: 12) {
@@ -32,19 +58,27 @@ private struct EffectRow: View {
                 .fill(DesignSystem.Colors.lightGray.opacity(0.25))
                 .frame(width: 52, height: 52)
                 .overlay(
-                    Image(systemName: "sparkles")
+                    Image(systemName: filter.needsDepth ? "cube.transparent" : "sparkles")
                         .foregroundStyle(DesignSystem.Colors.blueUniversal)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(effect.title)
+                Text(filter.name)
                     .font(DesignSystem.Fonts.semibold17)
                     .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-                if let subtitle = effect.subtitle {
-                    Text(subtitle)
-                        .font(DesignSystem.Fonts.regular12)
-                        .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.65))
+                
+                HStack(spacing: 8) {
+                    if filter.needsDepth {
+                        Label("LiDAR", systemImage: "sensor.tag.radiowaves.forward")
+                            .font(DesignSystem.Fonts.regular12)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.65))
+                    }
+                    
+                    if filter.supportsIntensity {
+                        Label("Intensity", systemImage: "slider.horizontal.3")
+                            .font(DesignSystem.Fonts.regular12)
+                            .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.5))
+                    }
                 }
             }
 

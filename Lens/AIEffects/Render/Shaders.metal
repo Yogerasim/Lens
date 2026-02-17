@@ -6,8 +6,15 @@ struct Uniforms {
     float time;
     float viewAspect;
     float textureAspect;
-    float rotation;    // поворот в радианах
-    float mirror;      // зеркалирование (0.0 или 1.0)
+    float rotation;             // поворот в радианах
+    float mirror;               // зеркалирование (0.0 или 1.0)
+    float hasDepth;             // есть ли depth данные (0.0 или 1.0)
+    float depthFlipX;           // 1.0 = flip X для depth UV
+    float depthFlipY;           // 1.0 = flip Y для depth UV
+    float intensity;            // сила эффекта (0.0 = passthrough, 1.0 = полный эффект)
+    float effectiveTextureAspect;  // aspect с учётом rotation (вычислен в Swift)
+    float uvScaleX;             // UV crop scale X для aspect-fill (<=1.0)
+    float uvScaleY;             // UV crop scale Y для aspect-fill (<=1.0)
 };
 
 // MARK: - Vertex Output
@@ -21,7 +28,7 @@ vertex VertexOut vertex_main(
     uint vid [[vertex_id]],
     constant Uniforms &uniforms [[buffer(0)]]
 ) {
-    // Базовый fullscreen quad (-1..1)
+    // Базовый fullscreen quad (-1..1) — БЕЗ масштабирования позиций
     float2 basePos[4] = {
         {-1, -1}, {1, -1},
         {-1,  1}, {1,  1}
@@ -33,8 +40,14 @@ vertex VertexOut vertex_main(
         {0, 1}, {1, 1}
     };
 
-    // 1) Поворот + зеркалирование UV вокруг центра
     float2 uv = baseUV[vid];
+    
+    // 1) Aspect-FILL через UV-crop (обрезаем края текстуры, не масштабируем геометрию)
+    // uvScaleX/uvScaleY вычислены в Swift: значение < 1 означает "обрезать эту ось"
+    // Применяем crop вокруг центра UV
+    uv = (uv - 0.5) * float2(uniforms.uvScaleX, uniforms.uvScaleY) + 0.5;
+    
+    // 2) Поворот UV вокруг центра
     float2 centeredUV = uv - 0.5;
     float cosR = cos(uniforms.rotation);
     float sinR = sin(uniforms.rotation);
@@ -42,27 +55,9 @@ vertex VertexOut vertex_main(
     rotUV.x = centeredUV.x * cosR - centeredUV.y * sinR;
     rotUV.y = centeredUV.x * sinR + centeredUV.y * cosR;
     rotUV += 0.5;
-    if (uniforms.mirror > 0.5) { rotUV.x = 1.0 - rotUV.x; }
 
-    // 2) Aspect-fill через масштаб геометрии (позиции), НЕ UV
-    // Эффективное соотношение сторон текстуры с учётом поворота: если повёрнута на 90°/270°, меняем местами
-    float effectiveTextureAspect = uniforms.textureAspect;
-    float rotMod = fmod(uniforms.rotation, 3.14159265f); // π
-    if (abs(rotMod - 1.57079633f) < 0.0001f) { // ~π/2
-        effectiveTextureAspect = 1.0 / effectiveTextureAspect;
-    }
-
-    float viewAspect = uniforms.viewAspect;
-    float2 scale = float2(1.0, 1.0);
-    if (effectiveTextureAspect > viewAspect) {
-        // Текстура шире в сравнении с view — уменьшаем X позиции
-        scale.x = viewAspect / effectiveTextureAspect;
-    } else {
-        // Текстура выше — уменьшаем Y позиции
-        scale.y = effectiveTextureAspect / viewAspect;
-    }
-
-    float2 pos = basePos[vid] * scale;
+    // 3) Позиция — fullscreen quad без масштабирования
+    float2 pos = basePos[vid];
 
     VertexOut out;
     out.position = float4(pos, 0, 1);
@@ -136,7 +131,11 @@ fragment float4 fragment_comic(
     // --- 7. Комбинируем ---
     float3 finalColor = mix(shifted, float3(0.0), edgeStrength);
     
-    return float4(finalColor, 1.0);
+    // --- 8. Apply intensity (mix с оригиналом) ---
+    float4 originalColor = tex.sample(s, uv);
+    float3 result = mix(originalColor.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -225,7 +224,10 @@ fragment float4 fragment_techlines(
     finalColor += float3(scanHighlight * 0.3, scanHighlight, scanHighlight * 0.8); // scan wave
     finalColor += float3(depth * 0.1, depth * 0.15, depth * 0.2); // subtle depth
     
-    return float4(finalColor, 1.0);
+    // --- 9. Apply intensity (mix с оригиналом) ---
+    float3 result = mix(color.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -251,7 +253,6 @@ fragment float4 fragment_acidtrip(
     
     float time = uniforms.time;
     float2 uv = in.uv;
-    float2 texSize = float2(tex.get_width(), tex.get_height());
     
     // --- 1. Волновые искажения UV (без вращения от центра) ---
     float2 warpedUV = uv;
@@ -321,7 +322,11 @@ fragment float4 fragment_acidtrip(
     float noise = fract(sin(dot(uv + time, float2(12.9898, 78.233))) * 43758.5453);
     color += (noise - 0.5) * 0.04;
     
-    return float4(color, 1.0);
+    // --- 9. Apply intensity (mix с оригиналом) ---
+    float4 originalColor = tex.sample(s, uv);
+    float3 result = mix(originalColor.rgb, color, uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
 
 // ============================================================================
@@ -466,5 +471,169 @@ fragment float4 fragment_neuralpainter(
     float finalLuma = dot(finalColor, float3(0.299, 0.587, 0.114));
     finalColor = mix(float3(finalLuma), finalColor, 1.25);
     
-    return float4(clamp(finalColor, 0.0, 1.0), 1.0);
+    // --- 10. Apply intensity (mix с оригиналом) ---
+    float3 result = mix(originalColor.rgb, clamp(finalColor, 0.0, 1.0), uniforms.intensity);
+    
+    return float4(result, 1.0);
 }
+
+// ============================================================================
+// MARK: - DEPTH FOG SHADER (использует LiDAR depth)
+// ============================================================================
+fragment float4 fragment_depthfog(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    texture2d<float> depthTex [[texture(1)]],
+    constant Uniforms &uniforms [[buffer(0)]]
+) {
+    constexpr sampler s(address::clamp_to_edge, filter::linear);
+    
+    float2 uv = in.uv;
+    float time = uniforms.time;
+    
+    // --- Depth UV с коррекцией ориентации ---
+    float2 depthUV = uv;
+    if (uniforms.depthFlipX > 0.5) {
+        depthUV.x = 1.0 - depthUV.x;
+    }
+    if (uniforms.depthFlipY > 0.5) {
+        depthUV.y = 1.0 - depthUV.y;
+    }
+    
+    // --- 1. Получаем цвет камеры ---
+    float4 color = tex.sample(s, uv);
+    
+    // --- 2. Если нет depth данных — показываем оригинал с индикатором ---
+    if (uniforms.hasDepth < 0.5) {
+        // Добавляем красную рамку как индикатор отсутствия depth
+        float border = 0.02;
+        if (uv.x < border || uv.x > 1.0 - border || uv.y < border || uv.y > 1.0 - border) {
+            return float4(1.0, 0.2, 0.2, 1.0); // красная рамка
+        }
+        return color;
+    }
+    
+    // --- 3. Получаем depth значение (используем скорректированные UV) ---
+    float depth = depthTex.sample(s, depthUV).r;
+    
+    // Нормализуем depth (обычно в метрах, ограничиваем 0-5м)
+    float normalizedDepth = clamp(depth / 5.0, 0.0, 1.0);
+    
+    // --- 4. Создаём туман на основе глубины ---
+    // Ближе = меньше тумана, дальше = больше тумана
+    float fogAmount = smoothstep(0.1, 0.8, normalizedDepth);
+    
+    // Анимированный цвет тумана
+    float3 fogColor = float3(
+        0.5 + 0.2 * sin(time * 0.3),
+        0.6 + 0.2 * sin(time * 0.4 + 1.0),
+        0.8 + 0.2 * sin(time * 0.5 + 2.0)
+    );
+    
+    // --- 5. Смешиваем камеру с туманом ---
+    float3 finalColor = mix(color.rgb, fogColor, fogAmount * 0.7);
+    
+    // --- 6. Добавляем depth-based контур (края объектов) ---
+    float2 texSize = float2(depthTex.get_width(), depthTex.get_height());
+    float2 pixelSize = 1.0 / texSize;
+    
+    // Используем depthUV для edge detection тоже
+    float depthL = depthTex.sample(s, depthUV + float2(-pixelSize.x, 0)).r;
+    float depthR = depthTex.sample(s, depthUV + float2(pixelSize.x, 0)).r;
+    float depthU = depthTex.sample(s, depthUV + float2(0, -pixelSize.y)).r;
+    float depthD = depthTex.sample(s, depthUV + float2(0, pixelSize.y)).r;
+    
+    float depthEdge = abs(depthL - depthR) + abs(depthU - depthD);
+    float edgeStrength = smoothstep(0.05, 0.2, depthEdge);
+    
+    // Неоновый контур на границах глубины
+    float3 edgeColor = float3(0.0, 1.0, 0.8) * edgeStrength;
+    finalColor += edgeColor * 0.5;
+    
+    // --- 7. Показываем индикатор глубины в углу (debug) ---
+    if (uv.x < 0.15 && uv.y > 0.85) {
+        // Маленький квадрат показывает depth
+        float depthVis = normalizedDepth;
+        return float4(depthVis, depthVis * 0.5, 1.0 - depthVis, 1.0);
+    }
+    
+    // --- 8. Apply intensity (mix с оригиналом) ---
+    float3 result = mix(color.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
+}
+
+// ============================================================================
+// MARK: - DEPTH OUTLINE SHADER (контуры по глубине)
+// ============================================================================
+fragment float4 fragment_depthoutline(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    texture2d<float> depthTex [[texture(1)]],
+    constant Uniforms &uniforms [[buffer(0)]]
+) {
+    constexpr sampler s(address::clamp_to_edge, filter::linear);
+    
+    float2 uv = in.uv;
+    float time = uniforms.time;
+    
+    // --- Depth UV с коррекцией ориентации ---
+    float2 depthUV = uv;
+    if (uniforms.depthFlipX > 0.5) {
+        depthUV.x = 1.0 - depthUV.x;
+    }
+    if (uniforms.depthFlipY > 0.5) {
+        depthUV.y = 1.0 - depthUV.y;
+    }
+    
+    float4 color = tex.sample(s, uv);
+    
+    // Без depth — просто показываем камеру
+    if (uniforms.hasDepth < 0.5) {
+        return color;
+    }
+    
+    // Получаем depth (используем скорректированные UV)
+    float depth = depthTex.sample(s, depthUV).r;
+    float normalizedDepth = clamp(depth / 5.0, 0.0, 1.0);
+    
+    // Sobel по depth для контуров
+    float2 texSize = float2(depthTex.get_width(), depthTex.get_height());
+    float2 ps = 1.0 / texSize;
+    
+    // Используем depthUV для edge detection
+    float tl = depthTex.sample(s, depthUV + float2(-ps.x, -ps.y)).r;
+    float t  = depthTex.sample(s, depthUV + float2(0, -ps.y)).r;
+    float tr = depthTex.sample(s, depthUV + float2(ps.x, -ps.y)).r;
+    float l  = depthTex.sample(s, depthUV + float2(-ps.x, 0)).r;
+    float r  = depthTex.sample(s, depthUV + float2(ps.x, 0)).r;
+    float bl = depthTex.sample(s, depthUV + float2(-ps.x, ps.y)).r;
+    float b  = depthTex.sample(s, depthUV + float2(0, ps.y)).r;
+    float br = depthTex.sample(s, depthUV + float2(ps.x, ps.y)).r;
+    
+    float sobelX = -tl - 2.0*l - bl + tr + 2.0*r + br;
+    float sobelY = -tl - 2.0*t - tr + bl + 2.0*b + br;
+    float edge = sqrt(sobelX * sobelX + sobelY * sobelY);
+    
+    // Сильный контур
+    float edgeStrength = smoothstep(0.03, 0.15, edge);
+    
+    // Цвет линий меняется от глубины
+    float3 lineColor = float3(
+        1.0 - normalizedDepth,
+        0.5 + 0.5 * sin(time + normalizedDepth * 3.0),
+        normalizedDepth
+    );
+    
+    // Чёрный фон + цветные контуры
+    float3 finalColor = mix(float3(0.02), lineColor, edgeStrength);
+    
+    // Добавляем немного оригинального цвета в близких объектах
+    finalColor = mix(finalColor, color.rgb * 0.3, (1.0 - normalizedDepth) * 0.4);
+    
+    // --- Apply intensity (mix с оригиналом) ---
+    float3 result = mix(color.rgb, finalColor, uniforms.intensity);
+    
+    return float4(result, 1.0);
+}
+

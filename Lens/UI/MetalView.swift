@@ -21,11 +21,13 @@ final class MetalHostView: UIView {
     
     private let metalLayer: CAMetalLayer
     
+    // Кэшируем последний drawableSize для сравнения
+    private var lastDrawableSize: CGSize = .zero
+    
     init(metalLayer: CAMetalLayer) {
         self.metalLayer = metalLayer
         super.init(frame: .zero)
         
-        metalLayer.contentsScale = UIScreen.main.scale
         layer.addSublayer(metalLayer)
     }
     
@@ -36,18 +38,45 @@ final class MetalHostView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         
-        // Обновляем frame и drawableSize при любом изменении layout
+        // Обновляем frame
         metalLayer.frame = bounds
         
-        let scale = UIScreen.main.scale
+        // ✅ FIX: Используем nativeScale из window (не UIScreen.main.scale)
+        // Это критично для iPad в Split View, Stage Manager или внешний дисплей
+        let nativeScale = window?.screen.nativeScale ?? UIScreen.main.nativeScale
+        
+        // Устанавливаем contentsScale из nativeScale
+        metalLayer.contentsScale = nativeScale
+        
+        // ✅ FIX: Вычисляем drawableSize в пикселях (points * scale)
         let drawableSize = CGSize(
-            width: bounds.width * scale,
-            height: bounds.height * scale
+            width: bounds.width * nativeScale,
+            height: bounds.height * nativeScale
         )
         
-        if metalLayer.drawableSize != drawableSize {
+        // Обновляем только при изменении (избегаем лишних обновлений)
+        if lastDrawableSize != drawableSize {
+            lastDrawableSize = drawableSize
             metalLayer.drawableSize = drawableSize
-            print("🧱 MetalLayer drawableSize updated:", drawableSize)
+            
+            // Диагностика для iPad vs iPhone
+            let deviceType = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+            print("🧱 MetalLayer drawableSize updated [\(deviceType)]:")
+            print("   📐 bounds (points): \(Int(bounds.width))x\(Int(bounds.height))")
+            print("   🔍 nativeScale: \(nativeScale)")
+            print("   📏 drawableSize (pixels): \(Int(drawableSize.width))x\(Int(drawableSize.height))")
+            print("   📊 viewAspect: \(String(format: "%.4f", drawableSize.width / drawableSize.height))")
+        }
+    }
+    
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        
+        // ✅ FIX: Обновляем scale когда view добавлен в window
+        // Важно для корректного nativeScale на iPad
+        if window != nil {
+            setNeedsLayout()
+            layoutIfNeeded()
         }
     }
 }

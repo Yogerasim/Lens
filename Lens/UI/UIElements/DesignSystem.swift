@@ -6,8 +6,8 @@ enum DesignSystem {
         static let redUniversal = Color(hex: "#F56B6C")
         static let lightGray = Color(hex: "#EEEEEE")
 
-        static let background = Color("AppBackground")
-        static let textPrimary = Color("TextPrimary")
+        static let background = Color.black
+        static let textPrimary = Color.white
     }
 
     enum Fonts {

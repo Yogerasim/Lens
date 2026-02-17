@@ -19,6 +19,7 @@
 		A7FBC3F32F2EA0E800608B3D /* Exceptions for "Lens" folder in "Lens" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AIEffects/FilterShaider/FramePacket.swift,
 				Info.plist,
 			);
 			target = A7FBC3DC2F2E82D600608B3D /* Lens */;

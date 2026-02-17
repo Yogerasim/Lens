@@ -20,11 +20,11 @@ final class MLInferenceEngine: InferenceEngine {
     private let inputSize = CGSize(width: 256, height: 256)
     
     // MARK: - Consume frame
-    func consume(pixelBuffer: CVPixelBuffer, time: CMTime) {
+    func consume(_ packet: FramePacket) {
         inferenceQueue.async {
             autoreleasepool {
                 // Passthrough — берём кадр камеры
-                self.onResult?(pixelBuffer, time)
+                self.onResult?(packet.pixelBuffer, packet.time)
                 FramePipeline.shared.gate.frameDidFinish()
             }
         }

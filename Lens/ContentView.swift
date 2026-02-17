@@ -45,19 +45,21 @@ struct ContentView: View {
 
     private func setupRenderer() {
         FramePipeline.shared.renderer = renderer
+        FramePipeline.shared.cameraManager = cameraManager  // Для управления depth
         renderer.cameraManager = cameraManager
 
-        renderer.onRenderedFrame = { renderedBuffer in
+        renderer.onRenderedFrame = { renderedBuffer, hasDepth, depthAvailable in
             if mediaRecorder.isRecording {
                 let time = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
-                mediaRecorder.appendVideoFrame(renderedBuffer, at: time)
+                mediaRecorder.appendVideoFrame(renderedBuffer, at: time, hasDepth: hasDepth, depthAvailable: depthAvailable)
             } else {
                 mediaRecorder.setLastRenderedFrame(renderedBuffer)
             }
         }
 
         cameraManager.onFrame = { pixelBuffer, time in
-            FramePipeline.shared.gate.push(pixelBuffer: pixelBuffer, time: time)
+            let packet = FramePacket(pixelBuffer: pixelBuffer, time: time)
+            FramePipeline.shared.gate.push(packet)
         }
 
         cameraManager.onAudioSample = { sampleBuffer in

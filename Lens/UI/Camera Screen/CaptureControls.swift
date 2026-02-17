@@ -58,9 +58,15 @@ struct CaptureControls: View {
 
     private func handleCapture() {
         if mediaRecorder.captureMode == .video {
-            mediaRecorder.isRecording
-            ? mediaRecorder.stopRecording()
-            : mediaRecorder.startRecording()
+            if mediaRecorder.isRecording {
+                // ✅ FIX: Останавливаем запись через FramePipeline для стабильности
+                FramePipeline.shared.stopRecording()
+                mediaRecorder.stopRecording()
+            } else {
+                // ✅ FIX: Запускаем запись через FramePipeline для стабильности
+                FramePipeline.shared.startRecording()
+                mediaRecorder.startRecording()
+            }
         } else {
             // Анимация затемнения при съёмке фото
             withAnimation(.easeOut(duration: 0.1)) {
