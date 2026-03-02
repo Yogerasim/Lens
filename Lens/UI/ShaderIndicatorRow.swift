@@ -2,24 +2,23 @@ import SwiftUI
 
 struct ShaderIndicatorRow: View {
     @ObservedObject var shaderManager: ShaderManager
-    @ObservedObject private var library = FilterLibrary.shared
-    @ObservedObject private var framePipeline = FramePipeline.shared
 
-    private var dotsCount: Int {
-        let isFront = framePipeline.cameraManager?.isFrontCamera ?? false
-        let isRecording = framePipeline.isRecording
-        let family = framePipeline.recordingFilterFamily
-        return library.availableFilters(isFront: isFront, recordingFamily: family, isRecording: isRecording).count
+    private let fixedDotsCount = 5
+
+    /// Активная точка: currentIndex по модулю 5 для циклического свечения
+    private var activeDot: Int {
+        shaderManager.currentIndex % fixedDotsCount
     }
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(0..<max(dotsCount, 1), id: \.self) { index in
+            ForEach(0..<fixedDotsCount, id: \.self) { index in
                 Circle()
-                    .fill(index == shaderManager.currentIndex
+                    .fill(index == activeDot
                           ? Color.white.opacity(0.95)
                           : Color.white.opacity(0.25))
                     .frame(width: 8, height: 8)
+                    .animation(.easeInOut(duration: 0.15), value: activeDot)
             }
         }
         .glassPanel(cornerRadius: 18, padding: 10)

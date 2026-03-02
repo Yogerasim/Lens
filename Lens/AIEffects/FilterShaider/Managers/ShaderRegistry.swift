@@ -68,6 +68,17 @@ enum ShaderRegistry {
 
         .init(id: "neuralPainter", displayName: "Neural Painter", fragment: "fragment_neuralpainter",
               icon: "brain.head.profile", needsDepth: false, supportsIntensity: true, family: .nonDepth),
+        .init(id: "depthSolid", displayName: "Depth Solid", fragment: "fragment_depthsolid",
+              icon: "cube.fill", needsDepth: true, supportsIntensity: true, family: .depth),
+
+        .init(id: "solidMono", displayName: "Solid Mono", fragment: "fragment_solidmono",
+              icon: "circle.lefthalf.filled", needsDepth: false, supportsIntensity: true, family: .nonDepth),
+
+        .init(id: "matrix", displayName: "Matrix", fragment: "fragment_matrix",
+              icon: "textformat.abc", needsDepth: false, supportsIntensity: true, family: .nonDepth),
+
+        .init(id: "depthGrid", displayName: "Depth Grid", fragment: "fragment_depthgrid",
+              icon: "grid", needsDepth: true, supportsIntensity: true, family: .depth),
 
         .init(id: "depthFog", displayName: "Depth Fog", fragment: "fragment_depthfog",
               icon: "cloud.fog.fill", needsDepth: true, supportsIntensity: true, family: .depth),
