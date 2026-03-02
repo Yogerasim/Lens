@@ -1,84 +1,71 @@
-#include <metal_stdlib>
-using namespace metal;
-
-struct Uniforms {
-    float time;
-    float viewAspect;
-    float textureAspect;
-    float rotation;
-    float mirror;
-    float hasDepth;
-    float depthFlipX;
-    float depthFlipY;
-    float intensity;
-    float effectiveTextureAspect;
-    float uvScaleX;
-    float uvScaleY;
-};
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 uv;
-};
+#include "Helpers/ShaderTypes.metalh"
+#include "Helpers/ShadersCommon.metalh"
 
 fragment float4 fragment_comic(
     VertexOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]],
-    constant Uniforms &uniforms [[buffer(0)]]
+    constant Uniforms &u [[buffer(0)]]
 ) {
     constexpr sampler s(address::clamp_to_edge, filter::linear);
 
     float2 uv = in.uv;
+
+    float4 src = tex.sample(s, uv);
+    float3 c = src.rgb;
+
+    float t = premiumCurve(u.intensity);
+
+    c = gentleTonemap(c);
+    c = softContrast(c, t);
+    c = softSaturation(c, t);
+
+    float levels = mix(12.0, 5.5, t);
+    float3 q = floor(c * levels + 0.5) / levels;
+
+    float posterMix = smoothstep(0.05, 0.85, t) * 0.70;
+    c = mix(c, q, posterMix);
+
     float2 texSize = float2(tex.get_width(), tex.get_height());
-    float2 pixelSize = 1.0 / texSize;
-    float time = uniforms.time;
+    float2 px = 1.0 / texSize;
 
-    float4 color = tex.sample(s, uv);
+    float tl = luma(tex.sample(s, uv + float2(-px.x, -px.y)).rgb);
+    float t0 = luma(tex.sample(s, uv + float2( 0.0, -px.y)).rgb);
+    float tr = luma(tex.sample(s, uv + float2( px.x, -px.y)).rgb);
+    float l0 = luma(tex.sample(s, uv + float2(-px.x,  0.0)).rgb);
+    float r0 = luma(tex.sample(s, uv + float2( px.x,  0.0)).rgb);
+    float bl = luma(tex.sample(s, uv + float2(-px.x,  px.y)).rgb);
+    float b0 = luma(tex.sample(s, uv + float2( 0.0,  px.y)).rgb);
+    float br = luma(tex.sample(s, uv + float2( px.x,  px.y)).rgb);
 
-    float levels = 4.0 + sin(time * 0.5) * 1.5;
-    float3 posterized = floor(color.rgb * levels + 0.5) / levels;
+    float gx = -tl - 2.0*l0 - bl + tr + 2.0*r0 + br;
+    float gy = -tl - 2.0*t0 - tr + bl + 2.0*b0 + br;
+    float edge = sqrt(gx*gx + gy*gy);
 
-    float3 tl = tex.sample(s, uv + float2(-pixelSize.x, -pixelSize.y)).rgb;
-    float3 t  = tex.sample(s, uv + float2(0, -pixelSize.y)).rgb;
-    float3 tr = tex.sample(s, uv + float2(pixelSize.x, -pixelSize.y)).rgb;
-    float3 l  = tex.sample(s, uv + float2(-pixelSize.x, 0)).rgb;
-    float3 r  = tex.sample(s, uv + float2(pixelSize.x, 0)).rgb;
-    float3 bl = tex.sample(s, uv + float2(-pixelSize.x, pixelSize.y)).rgb;
-    float3 b  = tex.sample(s, uv + float2(0, pixelSize.y)).rgb;
-    float3 br = tex.sample(s, uv + float2(pixelSize.x, pixelSize.y)).rgb;
+    float edgeTh = mix(0.22, 0.10, t);
+    float edgeSoft = mix(0.10, 0.06, t);
+    float edgeMask = smoothstep(edgeTh, edgeTh + edgeSoft, edge);
 
-    float tlL = dot(tl, float3(0.299, 0.587, 0.114));
-    float tL  = dot(t,  float3(0.299, 0.587, 0.114));
-    float trL = dot(tr, float3(0.299, 0.587, 0.114));
-    float lL  = dot(l,  float3(0.299, 0.587, 0.114));
-    float rL  = dot(r,  float3(0.299, 0.587, 0.114));
-    float blL = dot(bl, float3(0.299, 0.587, 0.114));
-    float bL  = dot(b,  float3(0.299, 0.587, 0.114));
-    float brL = dot(br, float3(0.299, 0.587, 0.114));
+    float antiGrime = smoothstep(0.02, 0.12, edge);
+    edgeMask *= antiGrime;
 
-    float sobelX = -tlL - 2.0*lL - blL + trL + 2.0*rL + brL;
-    float sobelY = -tlL - 2.0*tL - trL + blL + 2.0*bL + brL;
-    float edge = sqrt(sobelX * sobelX + sobelY * sobelY);
+    float lineAmount = edgeMask * (0.12 + 0.43 * t);
+    float3 ink = float3(0.02, 0.03, 0.05);
+    c = mix(c, ink, lineAmount);
 
-    float edgeThreshold = 0.12 + sin(time * 0.8) * 0.03;
-    float edgeStrength = smoothstep(edgeThreshold, edgeThreshold + 0.1, edge);
+    float halftoneOn = smoothstep(0.35, 1.0, t);
+    if (halftoneOn > 0.001) {
+        float2 p = uv * texSize;
+        float b = bayer4x4(p);
 
-    float saturationBoost = 1.3 + sin(time * 0.6) * 0.2;
-    float cmax = max(posterized.r, max(posterized.g, posterized.b));
-    float3 boostedColor = mix(float3(cmax), posterized, saturationBoost);
-    boostedColor = clamp(boostedColor, 0.0, 1.0);
+        float amp = 0.006 + 0.010 * halftoneOn;
 
-    float hueShift = sin(time * 0.3) * 0.1;
-    float3 shifted = boostedColor;
-    shifted.r = boostedColor.r * (1.0 + hueShift) - boostedColor.g * hueShift * 0.5;
-    shifted.g = boostedColor.g * (1.0 + hueShift * 0.5);
-    shifted.b = boostedColor.b * (1.0 - hueShift);
-    shifted = clamp(shifted, 0.0, 1.0);
+        float y = luma(c);
+        float midMask = smoothstep(0.10, 0.35, y) * (1.0 - smoothstep(0.70, 0.95, y));
 
-    float3 finalColor = mix(shifted, float3(0.0), edgeStrength);
+        c += (b - 0.5) * amp * midMask;
+        c = clamp(c, 0.0, 1.0);
+    }
 
-    float4 originalColor = tex.sample(s, uv);
-    float3 result = mix(originalColor.rgb, finalColor, uniforms.intensity);
-
-    return float4(result, 1.0);
+    float3 outC = mix(src.rgb, c, t);
+    return float4(outC, 1.0);
 }

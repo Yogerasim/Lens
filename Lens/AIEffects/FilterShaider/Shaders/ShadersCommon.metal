@@ -67,3 +67,53 @@ fragment float4 fragment_passthrough(
     constexpr sampler s(address::clamp_to_edge, filter::linear);
     return tex.sample(s, in.uv);
 }
+
+// --- Premium curve: в начале мягко, ближе к 1 — сильнее
+inline float premiumCurve(float t) {
+    t = clamp(t, 0.0, 1.0);
+    // smoothstep + немного “пружины” в середине
+    float s = t * t * (3.0 - 2.0 * t);
+    return clamp(s, 0.0, 1.0);
+}
+
+// --- Luma (Rec.709-ish)
+inline float luma(float3 c) {
+    return dot(c, float3(0.2126, 0.7152, 0.0722));
+}
+
+// --- Soft contrast around mid-gray
+inline float3 softContrast(float3 c, float amount) {
+    // amount: 0..1
+    float k = mix(1.0, 1.18, amount);    // очень аккуратно
+    return clamp((c - 0.5) * k + 0.5, 0.0, 1.0);
+}
+
+// --- Soft saturation
+inline float3 softSaturation(float3 c, float amount) {
+    // amount: 0..1
+    float y = luma(c);
+    float s = mix(1.0, 1.12, amount);    // аккуратно
+    return clamp(mix(float3(y), c, s), 0.0, 1.0);
+}
+
+// --- Gentle “filmic-ish” tonemap (очень мягкий, без сильного LUT ощущения)
+inline float3 gentleTonemap(float3 x) {
+    // простая мягкая компрессия хайлайтов
+    return x / (x + 0.6);
+}
+
+// --- Bayer 4x4 for subtle halftone/dither (стабильно и дёшево)
+inline float bayer4x4(float2 p) {
+    // p in pixel coords
+    int x = (int)p.x & 3;
+    int y = (int)p.y & 3;
+
+    // 4x4 Bayer matrix values 0..15
+    const float m[16] = {
+         0,  8,  2, 10,
+        12,  4, 14,  6,
+         3, 11,  1,  9,
+        15,  7, 13,  5
+    };
+    return m[y * 4 + x] / 15.0;
+}

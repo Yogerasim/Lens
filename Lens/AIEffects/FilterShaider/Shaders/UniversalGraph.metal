@@ -1,25 +1,5 @@
-#include <metal_stdlib>
-using namespace metal;
-
-struct Uniforms {
-    float time;
-    float viewAspect;
-    float textureAspect;
-    float rotation;
-    float mirror;
-    float hasDepth;
-    float depthFlipX;
-    float depthFlipY;
-    float intensity;
-    float effectiveTextureAspect;
-    float uvScaleX;
-    float uvScaleY;
-};
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 uv;
-};
+#include "Helpers/ShaderTypes.metalh"
+#include "Helpers/ShadersCommon.metalh"
 
 // Grain
 float3 applyGrain(float3 color, float2 uv, float time, float intensity) {

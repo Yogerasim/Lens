@@ -1,0 +1,43 @@
+#pragma once
+#include <metal_stdlib>
+using namespace metal;
+
+constant float kBayer4x4[16] = {
+     0,  8,  2, 10,
+    12,  4, 14,  6,
+     3, 11,  1,  9,
+    15,  7, 13,  5
+};
+
+// --- Premium curve
+inline float premiumCurve(float t) {
+    t = clamp(t, 0.0, 1.0);
+    float s = t * t * (3.0 - 2.0 * t);
+    return clamp(s, 0.0, 1.0);
+}
+
+inline float luma(float3 c) {
+    return dot(c, float3(0.2126, 0.7152, 0.0722));
+}
+
+inline float3 softContrast(float3 c, float amount) {
+    float k = mix(1.0, 1.18, amount);
+    return clamp((c - 0.5) * k + 0.5, 0.0, 1.0);
+}
+
+inline float3 softSaturation(float3 c, float amount) {
+    float y = luma(c);
+    float s = mix(1.0, 1.12, amount);
+    return clamp(mix(float3(y), c, s), 0.0, 1.0);
+}
+
+inline float3 gentleTonemap(float3 x) {
+    return x / (x + 0.6);
+}
+
+// --- Bayer 4x4
+inline float bayer4x4(float2 p) {
+    int x = (int)p.x & 3;
+    int y = (int)p.y & 3;
+    return kBayer4x4[y * 4 + x] / 15.0;
+}

@@ -1,25 +1,5 @@
-#include <metal_stdlib>
-using namespace metal;
-
-struct Uniforms {
-    float time;
-    float viewAspect;
-    float textureAspect;
-    float rotation;
-    float mirror;
-    float hasDepth;
-    float depthFlipX;
-    float depthFlipY;
-    float intensity;
-    float effectiveTextureAspect;
-    float uvScaleX;
-    float uvScaleY;
-};
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 uv;
-};
+#include "Helpers/ShaderTypes.metalh"
+#include "Helpers/ShadersCommon.metalh"
 
 static float3 thermalPalette(float t) {
     t = clamp(t, 0.0, 1.0);
