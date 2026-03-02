@@ -2,7 +2,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#include "Helpers/ShaderTypes.metalh"
+#include "ShaderTypes.metalh"
 
 // MARK: - Vertex Shader (single source of truth)
 vertex VertexOut vertex_main(

@@ -20,7 +20,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AIEffects/FilterShaider/FramePacket.swift,
-				AIEffects/FilterShaider/Shaders/ShadersCommon.metal,
 				Info.plist,
 			);
 			target = A7FBC3DC2F2E82D600608B3D /* Lens */;
