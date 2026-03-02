@@ -17,8 +17,8 @@ final class MetalRenderer: RenderEngine {
     let metalLayer: CAMetalLayer
     
     /// Callback для получения обработанного кадра (с шейдером)
-    /// Параметры: pixelBuffer, hasDepth (стабильный флаг), depthAvailable (есть ли depth в этом кадре)
-    var onRenderedFrame: ((CVPixelBuffer, Bool, Bool) -> Void)?
+    /// Параметры: pixelBuffer, sampleTime (оригинальный timestamp из capture session), hasDepth, depthAvailable
+    var onRenderedFrame: ((CVPixelBuffer, CMTime, Bool, Bool) -> Void)?
     
     /// Ссылка на CameraManager для получения информации о камере
     weak var cameraManager: CameraManager?
@@ -328,6 +328,34 @@ final class MetalRenderer: RenderEngine {
         encoder.setFragmentTexture(inputTexture, index: 0)
         encoder.setFragmentTexture(depthTexture, index: 1)  // Depth texture at index 1
         
+        // Если это Custom Graph shader — передаём дополнительные данные графа
+        if shaderManager.currentShader == .customGraph {
+            let graphSession = GraphSessionController.shared
+            let graphUniforms = graphSession.getGraphUniforms(hasDepth: hasDepth > 0.5)
+            
+            // Передаём типы узлов как массив int
+            var nodeTypes: [Int32] = [
+                graphUniforms.nodeTypes.0, graphUniforms.nodeTypes.1,
+                graphUniforms.nodeTypes.2, graphUniforms.nodeTypes.3,
+                graphUniforms.nodeTypes.4, graphUniforms.nodeTypes.5,
+                graphUniforms.nodeTypes.6, graphUniforms.nodeTypes.7
+            ]
+            encoder.setFragmentBytes(&nodeTypes, length: MemoryLayout<Int32>.size * 8, index: 1)
+            
+            // Передаём интенсивности узлов
+            var nodeIntensities: [Float] = [
+                graphUniforms.nodeIntensities.0, graphUniforms.nodeIntensities.1,
+                graphUniforms.nodeIntensities.2, graphUniforms.nodeIntensities.3,
+                graphUniforms.nodeIntensities.4, graphUniforms.nodeIntensities.5,
+                graphUniforms.nodeIntensities.6, graphUniforms.nodeIntensities.7
+            ]
+            encoder.setFragmentBytes(&nodeIntensities, length: MemoryLayout<Float>.size * 8, index: 2)
+            
+            // Передаём количество узлов
+            var nodeCount = graphUniforms.nodeCount
+            encoder.setFragmentBytes(&nodeCount, length: MemoryLayout<Int32>.size, index: 3)
+        }
+        
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
 
@@ -340,6 +368,7 @@ final class MetalRenderer: RenderEngine {
         // Сохраняем флаги для callback
         let hasDepthBool = hasDepth > 0.5
         let depthAvailableCopy = depthAvailable
+        let sampleTime = packet.time  // оригинальный timestamp из capture session
         
         commandBuffer.present(drawable)
         
@@ -347,7 +376,7 @@ final class MetalRenderer: RenderEngine {
         if let buffer = capturedBuffer {
             let callback = onRenderedFrame
             commandBuffer.addCompletedHandler { _ in
-                callback?(buffer, hasDepthBool, depthAvailableCopy)
+                callback?(buffer, sampleTime, hasDepthBool, depthAvailableCopy)
             }
         }
         

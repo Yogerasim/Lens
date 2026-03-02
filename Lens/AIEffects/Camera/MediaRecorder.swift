@@ -9,29 +9,6 @@ enum CaptureMode: String, CaseIterable {
     case video = "ВИДЕО"
 }
 
-// MARK: - Recording Clock (монотонные timestamps для стабильной записи)
-final class RecordingClock {
-    let targetFPS: Int32 = 30
-    lazy var frameDuration = CMTime(value: 1, timescale: targetFPS)
-    
-    private var frameIndex: Int64 = 0
-    
-    /// Сбросить счётчик при старте записи
-    func reset() {
-        frameIndex = 0
-    }
-    
-    /// Получить следующий presentation time (монотонный)
-    func nextPresentationTime() -> CMTime {
-        let pts = CMTime(value: frameIndex, timescale: targetFPS)
-        frameIndex += 1
-        return pts
-    }
-    
-    /// Текущий индекс кадра
-    var currentFrameIndex: Int64 { frameIndex }
-}
-
 // MARK: - Video Recorder
 final class MediaRecorder: NSObject, ObservableObject {
     
@@ -40,27 +17,24 @@ final class MediaRecorder: NSObject, ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var captureMode: CaptureMode = .video
     
-    // MARK: - Recording Clock
-    private let recordingClock = RecordingClock()
-    
     // MARK: - Private - Video
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
     private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     
-    // MARK: - Recording PixelBuffer Pool (фиксированный размер на всё время записи)
-    private var recordingPixelBufferPool: CVPixelBufferPool?
-    private var recordingWidth: Int = 0
-    private var recordingHeight: Int = 0
-    
     // MARK: - Private - State
     private var videoURL: URL?
-    private var startTime: CMTime?
-    private var audioStartTime: CMTime?
+    /// Время первого видеокадра (capture session timebase) — единый source of truth
+    private var sessionBaseTime: CMTime?
     private var lastVideoTime: CMTime = .zero
     private var recordingTimer: Timer?
     private var sessionStarted = false
+    
+    /// Счётчик видеокадров для диагностики
+    private var videoFrameCount: Int64 = 0
+    /// Счётчик аудиосэмплов для диагностики
+    private var audioSampleCount: Int64 = 0
     
     private let writerQueue = DispatchQueue(label: "media.recorder.queue", qos: .userInitiated)
     
@@ -110,7 +84,8 @@ final class MediaRecorder: NSObject, ObservableObject {
     }
     
     /// Записать видео кадр (обработанный с шейдером)
-    func appendVideoFrame(_ pixelBuffer: CVPixelBuffer, at time: CMTime, hasDepth: Bool = false, depthAvailable: Bool = false) {
+    /// - Parameter sampleTime: presentationTimeStamp из ОРИГИНАЛЬНОГО CMSampleBuffer камеры
+    func appendVideoFrame(_ pixelBuffer: CVPixelBuffer, sampleTime: CMTime, hasDepth: Bool = false) {
         // Сохраняем для фото
         lastRenderedBuffer = pixelBuffer
         
@@ -125,37 +100,43 @@ final class MediaRecorder: NSObject, ObservableObject {
             
             // Инициализируем сессию при первом кадре
             if !self.sessionStarted {
-                self.startTime = time
-                self.recordingClock.reset()
-                writer.startSession(atSourceTime: .zero)
+                self.sessionBaseTime = sampleTime
+                self.videoFrameCount = 0
+                self.audioSampleCount = 0
+                writer.startSession(atSourceTime: sampleTime)
                 self.sessionStarted = true
-                print("✅ Recording session started at writerFPS=\(self.recordingClock.targetFPS)")
+                print("✅ Recording session started, baseTime=\(String(format: "%.3f", sampleTime.seconds))s")
             }
             
-            // ✅ FIX: Используем монотонный RecordingClock вместо timestamps камеры
-            let writerPTS = self.recordingClock.nextPresentationTime()
-            let frameIndex = self.recordingClock.currentFrameIndex
+            // Пропускаем кадры с неправильным временем (раньше начала сессии)
+            guard let baseTime = self.sessionBaseTime else { return }
+            if CMTimeCompare(sampleTime, baseTime) < 0 { return }
             
-            // Проверяем размеры буфера
-            let bufferW = CVPixelBufferGetWidth(pixelBuffer)
-            let bufferH = CVPixelBufferGetHeight(pixelBuffer)
-            
-            // Диагностика на каждый writer append
-            if frameIndex % 30 == 0 { // Каждую секунду (30 fps)
-                print("🎞️ writer frame=\(frameIndex) pts=\(String(format: "%.3f", writerPTS.seconds))s hasDepth=\(hasDepth) depthAvailable=\(depthAvailable)")
-                print("   📐 RGB buffer: \(bufferW)x\(bufferH)")
+            // Проверяем что время монотонно растёт
+            if CMTimeCompare(sampleTime, self.lastVideoTime) <= 0 && self.videoFrameCount > 0 {
+                return // Пропускаем дубликат/неправильный порядок
             }
             
-            // Записываем кадр с монотонным timestamp
-            if adaptor.append(pixelBuffer, withPresentationTime: writerPTS) {
-                self.lastVideoTime = writerPTS
+            self.videoFrameCount += 1
+            
+            // Диагностика каждую секунду (~30-60 кадров)
+            let elapsed = CMTimeSubtract(sampleTime, baseTime).seconds
+            if self.videoFrameCount % 30 == 0 {
+                let currentFPS = elapsed > 0 ? Double(self.videoFrameCount) / elapsed : 0
+                print("🎞️ video frame=\(self.videoFrameCount) pts=\(String(format: "%.3f", sampleTime.seconds))s elapsed=\(String(format: "%.1f", elapsed))s fps=\(String(format: "%.1f", currentFPS))")
+            }
+            
+            // ✅ Записываем кадр с РЕАЛЬНЫМ timestamp из capture session
+            if adaptor.append(pixelBuffer, withPresentationTime: sampleTime) {
+                self.lastVideoTime = sampleTime
+                FPSCounter.shared.tickRecording()
             } else {
-                print("❌ Failed to append video frame \(frameIndex)")
+                print("❌ Failed to append video frame \(self.videoFrameCount), writer.status=\(writer.status.rawValue)")
             }
         }
     }
     
-    /// Записать аудио сэмпл
+    /// Записать аудио сэмпл (с ОРИГИНАЛЬНЫМ timestamp из capture session)
     func appendAudioSample(_ sampleBuffer: CMSampleBuffer) {
         guard isRecording else { return }
         
@@ -166,33 +147,22 @@ final class MediaRecorder: NSObject, ObservableObject {
                   let input = self.audioInput,
                   input.isReadyForMoreMediaData else { return }
             
-            // Корректируем время аудио относительно старта видео
-            guard let startTime = self.startTime else { return }
-            
+            // Пропускаем аудио до начала видео сессии
+            guard let baseTime = self.sessionBaseTime else { return }
             let audioTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            let adjustedTime = CMTimeSubtract(audioTime, startTime)
+            if CMTimeCompare(audioTime, baseTime) < 0 { return }
             
-            // Пропускаем аудио до начала видео
-            if adjustedTime.seconds < 0 { return }
+            self.audioSampleCount += 1
             
-            // Создаём копию сэмпла с корректным временем
-            var timingInfo = CMSampleTimingInfo(
-                duration: CMSampleBufferGetDuration(sampleBuffer),
-                presentationTimeStamp: adjustedTime,
-                decodeTimeStamp: .invalid
-            )
+            // Диагностика каждую секунду (~44100 сэмплов)
+            if self.audioSampleCount % 44100 == 0 {
+                let elapsed = CMTimeSubtract(audioTime, baseTime).seconds
+                print("🎵 audio samples=\(self.audioSampleCount) pts=\(String(format: "%.3f", audioTime.seconds))s elapsed=\(String(format: "%.1f", elapsed))s")
+            }
             
-            var adjustedBuffer: CMSampleBuffer?
-            CMSampleBufferCreateCopyWithNewTiming(
-                allocator: kCFAllocatorDefault,
-                sampleBuffer: sampleBuffer,
-                sampleTimingEntryCount: 1,
-                sampleTimingArray: &timingInfo,
-                sampleBufferOut: &adjustedBuffer
-            )
-            
-            if let buffer = adjustedBuffer {
-                input.append(buffer)
+            // ✅ Записываем аудио с ОРИГИНАЛЬНЫМ timestamp — он из той же capture session что и видео
+            if !input.append(sampleBuffer) {
+                print("❌ Failed to append audio sample \(self.audioSampleCount)")
             }
         }
     }
@@ -228,8 +198,7 @@ final class MediaRecorder: NSObject, ObservableObject {
                 AVVideoHeightKey: videoHeight,
                 AVVideoCompressionPropertiesKey: [
                     AVVideoAverageBitRateKey: 10_000_000,
-                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                    AVVideoMaxKeyFrameIntervalKey: 30
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
                 ]
             ]
             
@@ -268,12 +237,14 @@ final class MediaRecorder: NSObject, ObservableObject {
             
             // Start writing
             assetWriter?.startWriting()
-            startTime = nil
-            audioStartTime = nil
+            sessionBaseTime = nil
             lastVideoTime = .zero
             sessionStarted = false
+            videoFrameCount = 0
+            audioSampleCount = 0
             
             print("✅ AssetWriter ready: \(tempURL.lastPathComponent)")
+            print("🎬 Video settings: \(videoWidth)x\(videoHeight)")
             
         } catch {
             print("❌ Failed to create AssetWriter: \(error)")
@@ -289,12 +260,22 @@ final class MediaRecorder: NSObject, ObservableObject {
         videoInput?.markAsFinished()
         audioInput?.markAsFinished()
         
+        let totalFrames = videoFrameCount
+        let totalAudioSamples = audioSampleCount
+        let elapsed: Double
+        if let base = sessionBaseTime {
+            elapsed = CMTimeSubtract(lastVideoTime, base).seconds
+        } else {
+            elapsed = 0
+        }
+        
         writer.finishWriting { [weak self] in
             guard let self = self else { return }
             
             switch writer.status {
             case .completed:
-                print("✅ Recording completed successfully")
+                let avgFPS = elapsed > 0 ? Double(totalFrames) / elapsed : 0
+                print("✅ Recording completed: \(totalFrames) frames, \(totalAudioSamples) audio samples, \(String(format: "%.1f", elapsed))s, avg \(String(format: "%.1f", avgFPS)) fps")
                 if let url = self.videoURL {
                     self.saveVideoToLibrary(url: url)
                 }
@@ -310,6 +291,10 @@ final class MediaRecorder: NSObject, ObservableObject {
             self.audioInput = nil
             self.pixelBufferAdaptor = nil
             self.sessionStarted = false
+            
+            DispatchQueue.main.async {
+                FPSCounter.shared.recordingFPS = 0
+            }
         }
     }
     

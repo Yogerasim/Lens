@@ -33,7 +33,9 @@ final class FilterLibrary: ObservableObject {
         FilterDefinition(name: "Acid Trip", shaderName: "fragment_acidtrip"),
         FilterDefinition(name: "Neural Painter", shaderName: "fragment_neuralpainter"),
         FilterDefinition(name: "Depth Fog", shaderName: "fragment_depthfog", needsDepth: true),
-        FilterDefinition(name: "Depth Outline", shaderName: "fragment_depthoutline", needsDepth: true)
+        FilterDefinition(name: "Depth Outline", shaderName: "fragment_depthoutline", needsDepth: true),
+        // Custom Graph - universal shader для пользовательских эффектов
+        FilterDefinition(name: "Custom Graph", shaderName: "fragment_universalgraph")
     ]
     
     private init() {

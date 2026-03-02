@@ -31,6 +31,13 @@ struct ContentView: View {
         .onAppear {
             setupRenderer()
             cameraManager.start()
+            
+            // Восстанавливаем последний активный эффект
+            Task { @MainActor in
+                // Небольшая задержка чтобы все инициализировалось
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                GraphSessionController.shared.restoreLastActiveEffect(shaderManager: shaderManager)
+            }
         }
         .onDisappear {
             cameraManager.stop()
@@ -48,10 +55,9 @@ struct ContentView: View {
         FramePipeline.shared.cameraManager = cameraManager  // Для управления depth
         renderer.cameraManager = cameraManager
 
-        renderer.onRenderedFrame = { renderedBuffer, hasDepth, depthAvailable in
+        renderer.onRenderedFrame = { renderedBuffer, sampleTime, hasDepth, depthAvailable in
             if mediaRecorder.isRecording {
-                let time = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
-                mediaRecorder.appendVideoFrame(renderedBuffer, at: time, hasDepth: hasDepth, depthAvailable: depthAvailable)
+                mediaRecorder.appendVideoFrame(renderedBuffer, sampleTime: sampleTime, hasDepth: hasDepth)
             } else {
                 mediaRecorder.setLastRenderedFrame(renderedBuffer)
             }

@@ -11,6 +11,7 @@ enum ShaderType: String, CaseIterable {
     case neuralPainter = "Neural Painter"
     case depthFog = "Depth Fog"
     case depthOutline = "Depth Outline"
+    case customGraph = "Custom Graph"
     
     var fragmentFunctionName: String {
         switch self {
@@ -20,6 +21,7 @@ enum ShaderType: String, CaseIterable {
         case .neuralPainter: return "fragment_neuralpainter"
         case .depthFog: return "fragment_depthfog"
         case .depthOutline: return "fragment_depthoutline"
+        case .customGraph: return "fragment_universalgraph"
         }
     }
     
@@ -31,6 +33,7 @@ enum ShaderType: String, CaseIterable {
         case .neuralPainter: return "brain.head.profile"
         case .depthFog: return "cloud.fog.fill"
         case .depthOutline: return "cube.transparent"
+        case .customGraph: return "square.stack.3d.up.fill"
         }
     }
 }

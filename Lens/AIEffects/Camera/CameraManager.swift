@@ -100,20 +100,7 @@ final class CameraManager: NSObject, ObservableObject {
     
     /// Настраиваем video и audio outputs
     private func configureOutputs() {
-        // Audio input (try add; if permission denied later, session will still run)
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
-            if let mic = AVCaptureDevice.default(for: .audio) {
-                do {
-                    let inAudio = try AVCaptureDeviceInput(device: mic)
-                    if self.session.canAddInput(inAudio) {
-                        self.session.addInput(inAudio)
-                        self.audioInput = inAudio
-                    }
-                } catch {
-                    print("⚠️ Failed to create audio input: \(error)")
-                }
-            }
-        }
+        configureAudioInput()
         
         // Video output settings
         self.videoOutput.alwaysDiscardsLateVideoFrames = true
@@ -131,6 +118,41 @@ final class CameraManager: NSObject, ObservableObject {
         if self.session.canAddOutput(self.audioOutput) {
             self.session.addOutput(self.audioOutput)
         }
+    }
+    
+    /// Настраиваем аудио input (вызываем при старте и при получении разрешения)
+    private func configureAudioInput() {
+        sessionQueue.async {
+            // Проверяем если аудио input уже добавлен
+            if self.audioInput != nil { return }
+            
+            // Добавляем аудио input если есть разрешение
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
+                if let mic = AVCaptureDevice.default(for: .audio) {
+                    do {
+                        let inAudio = try AVCaptureDeviceInput(device: mic)
+                        if self.session.canAddInput(inAudio) {
+                            self.session.addInput(inAudio)
+                            self.audioInput = inAudio
+                            print("✅ Audio input configured")
+                        }
+                    } catch {
+                        print("⚠️ Failed to create audio input: \(error)")
+                    }
+                } else {
+                    print("⚠️ No audio device available")
+                }
+            } else {
+                print("⚠️ Audio permission not granted")
+            }
+        }
+    }
+    
+    // MARK: - Audio Setup
+    
+    /// Попытаться добавить аудио input (вызывать при получении разрешения)
+    func ensureAudioInput() {
+        configureAudioInput()
     }
     
     // MARK: - Start/Stop

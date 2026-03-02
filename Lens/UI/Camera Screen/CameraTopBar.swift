@@ -13,8 +13,19 @@ struct CameraTopBar: View {
                 Text(shaderManager.currentShader.rawValue.uppercased())
                     .font(.caption.bold())
 
-                Text("FPS: \(fps.fps)")
-                    .font(.system(.body, design: .monospaced))
+                if mediaRecorder.isRecording {
+                    // Во время записи показываем оба FPS
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CAM: \(fps.fps) FPS")
+                            .font(.system(.caption2, design: .monospaced))
+                        Text("REC: \(fps.recordingFPS) FPS")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(fps.recordingFPS > 0 ? .green : .red)
+                    }
+                } else {
+                    Text("FPS: \(fps.fps)")
+                        .font(.system(.body, design: .monospaced))
+                }
             }
             .foregroundColor(.white)
             .glassPanel(cornerRadius: 18, padding: 10)
