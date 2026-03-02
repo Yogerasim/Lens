@@ -30,21 +30,10 @@ final class SpeechService: ObservableObject {
     private var onFinal: ((String) -> Void)?
     private var onError: ((Error) -> Void)?
     
-    // Защита от двойного вызова onFinal
-    private var lastFinalText: String = ""
-    private var hasFiredFinal: Bool = false
-    
-    // Поддерживаемые локали с приоритетом
-    private let preferredLocales: [Locale] = [
-        Locale(identifier: "ru-RU"),  // Приоритет русскому
-        Locale(identifier: "en-US")   // Fallback английский
-    ]
-    
     // MARK: - Init
     
     init() {
-        // Инициализируем с русской локалью по умолчанию
-        speechRecognizer = SFSpeechRecognizer(locale: preferredLocales[0])
+        speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
     }
     
     // MARK: - Permissions
@@ -84,24 +73,9 @@ final class SpeechService: ObservableObject {
     
     // MARK: - Start/Stop Recognition
     
-    /// Начинает распознавание речи с автовыбором локали
+    /// Начинает распознавание речи
     func start(
-        onPartial: @escaping (String) -> Void,
-        onFinal: @escaping (String) -> Void,
-        onError: @escaping (Error) -> Void
-    ) {
-        // Жёстко используем русскую локаль для максимальной надёжности
-        start(
-            locale: preferredLocales[0], // ru-RU
-            onPartial: onPartial,
-            onFinal: onFinal,
-            onError: onError
-        )
-    }
-    
-    /// Начинает распознавание речи с конкретной локалью
-    func start(
-        locale: Locale,
+        locale: Locale = .current,
         onPartial: @escaping (String) -> Void,
         onFinal: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
@@ -120,21 +94,13 @@ final class SpeechService: ObservableObject {
         self.onFinal = onFinal
         self.onError = onError
         
-        // Сбрасываем защиту от дублирования
-        self.hasFiredFinal = false
-        self.lastFinalText = ""
-        
-        // Выбираем лучший доступный recognizer
-        let selectedLocale = selectBestLocale(preferred: locale)
-        speechRecognizer = SFSpeechRecognizer(locale: selectedLocale)
+        // Создаём recognizer с нужной локалью
+        speechRecognizer = SFSpeechRecognizer(locale: locale)
         
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
-            print("🎤 SpeechService: Recognizer unavailable for \(selectedLocale.identifier)")
             onError(SpeechError.recognizerUnavailable)
             return
         }
-        
-        print("🎤 SpeechService: Using locale \(selectedLocale.identifier)")
         
         do {
             try startAudioEngine()
@@ -146,40 +112,12 @@ final class SpeechService: ObservableObject {
         }
     }
     
-    /// Выбирает лучшую доступную локаль
-    private func selectBestLocale(preferred: Locale) -> Locale {
-        // Сначала проверяем предпочитаемую
-        if SFSpeechRecognizer(locale: preferred)?.isAvailable == true {
-            return preferred
-        }
-        
-        // Затем пробуем все поддерживаемые по порядку приоритета
-        for locale in preferredLocales {
-            if SFSpeechRecognizer(locale: locale)?.isAvailable == true {
-                print("🎤 SpeechService: Fallback to \(locale.identifier)")
-                return locale
-            }
-        }
-        
-        // Последний fallback - система
-        print("🎤 SpeechService: Using system locale as final fallback")
-        return Locale.current
-    }
-    
     /// Останавливает распознавание речи
     func stop() {
         guard isListening else { return }
         
-        stopInternal()
-        print("🎤 SpeechService: Stopped listening")
-    }
-    
-    /// Внутренний stop без логов (для вызова из onFinal)
-    private func stopInternal() {
         audioEngine.stop()
-        if audioEngine.inputNode.numberOfInputs > 0 {
-            audioEngine.inputNode.removeTap(onBus: 0)
-        }
+        audioEngine.inputNode.removeTap(onBus: 0)
         
         recognitionRequest?.endAudio()
         recognitionRequest = nil
@@ -188,6 +126,7 @@ final class SpeechService: ObservableObject {
         recognitionTask = nil
         
         isListening = false
+        print("🎤 SpeechService: Stopped listening")
     }
     
     // MARK: - Private Methods
@@ -210,17 +149,7 @@ final class SpeechService: ObservableObject {
         }
         
         recognitionRequest.shouldReportPartialResults = true
-        
-        // ✅ FIX: Принудительно используем on-device распознавание
-        // Это гарантирует русскую локаль без серверных подмен
-        if let recognizer = speechRecognizer, recognizer.supportsOnDeviceRecognition {
-            recognitionRequest.requiresOnDeviceRecognition = true
-            print("🎤 SpeechService: ✅ On-device recognition ENABLED (forced)")
-        } else {
-            // Fallback: устройство не поддерживает on-device
-            recognitionRequest.requiresOnDeviceRecognition = false
-            print("🎤 SpeechService: ⚠️ On-device not supported, using server-side")
-        }
+        recognitionRequest.requiresOnDeviceRecognition = false
         
         // Создаём задачу распознавания
         recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
@@ -243,12 +172,11 @@ final class SpeechService: ObservableObject {
     
     private func handleRecognitionResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let error = error {
-            // Игнорируем ошибку отмены и некоторые системные ошибки
-            let nsError = error as NSError
-            if nsError.code != 1 && nsError.code != 216 && nsError.code != 203 {
+            // Игнорируем ошибку отмены
+            if (error as NSError).code != 1 && (error as NSError).code != 216 {
                 onError?(error)
             }
-            stopInternal()
+            stop()
             return
         }
         
@@ -257,28 +185,8 @@ final class SpeechService: ObservableObject {
         let transcription = result.bestTranscription.formattedString
         
         if result.isFinal {
-            // Проверяем что текст не пустой и не мусор
-            let canonicalText = EffectResolver.canonicalKey(transcription)
-            guard !canonicalText.isEmpty, transcription.count > 1 else {
-                print("🎤 SpeechService: Ignoring empty/invalid final: '\(transcription)'")
-                stopInternal()
-                return
-            }
-            
-            // Защита от двойного вызова onFinal с тем же текстом
-            guard !hasFiredFinal, transcription != lastFinalText else {
-                print("🎤 SpeechService: Skipping duplicate final: '\(transcription)'")
-                return
-            }
-            
-            hasFiredFinal = true
-            lastFinalText = transcription
-            
-            print("FINAL: '\(transcription)'")
-            
-            // Сначала останавливаем, потом вызываем callback
-            stopInternal()
             onFinal?(transcription)
+            stop()
         } else {
             onPartial?(transcription)
         }
