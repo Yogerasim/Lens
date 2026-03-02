@@ -329,7 +329,7 @@ final class MetalRenderer: RenderEngine {
         encoder.setFragmentTexture(depthTexture, index: 1)  // Depth texture at index 1
         
         // Если это Custom Graph shader — передаём дополнительные данные графа
-        if shaderManager.currentShader == .customGraph {
+        if shaderManager.currentFragment == "fragment_universalgraph" {
             let graphSession = GraphSessionController.shared
             let graphUniforms = graphSession.getGraphUniforms(hasDepth: hasDepth > 0.5)
             

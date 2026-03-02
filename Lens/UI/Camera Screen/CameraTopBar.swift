@@ -10,7 +10,7 @@ struct CameraTopBar: View {
         HStack {
             // LEFT: shader + fps
             VStack(alignment: .leading, spacing: 4) {
-                Text(shaderManager.currentShader.rawValue.uppercased())
+                Text(shaderManager.currentDisplayName.uppercased())
                     .font(.caption.bold())
 
                 if mediaRecorder.isRecording {

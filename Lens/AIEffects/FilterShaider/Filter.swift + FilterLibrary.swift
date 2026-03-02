@@ -26,93 +26,52 @@ struct FilterDefinition: Identifiable, Codable, Hashable {
 
 final class FilterLibrary: ObservableObject {
     static let shared = FilterLibrary()
-    
-    @Published var filters: [FilterDefinition] = [
-        FilterDefinition(name: "Comic", shaderName: "fragment_comic"),
-        FilterDefinition(name: "Tech Lines", shaderName: "fragment_techlines"),
-        FilterDefinition(name: "Acid Trip", shaderName: "fragment_acidtrip"),
-        FilterDefinition(name: "Neural Painter", shaderName: "fragment_neuralpainter"),
-        FilterDefinition(name: "Depth Fog", shaderName: "fragment_depthfog", needsDepth: true),
-        FilterDefinition(name: "Depth Outline", shaderName: "fragment_depthoutline", needsDepth: true),
-        // Custom Graph - universal shader для пользовательских эффектов
-        FilterDefinition(name: "Custom Graph", shaderName: "fragment_universalgraph")
-    ]
-    
+
+    @Published private(set) var filters: [FilterDefinition] = []
+
     private init() {
-        let depthFilters = filters.filter { $0.needsDepth }
-        print("📚 FilterLibrary: Initialized with \(filters.count) filters")
-        print("   🤖 Depth filters (\(depthFilters.count)): \(depthFilters.map { $0.name }.joined(separator: ", "))")
+        filters = ShaderRegistry.all.map {
+            FilterDefinition(
+                name: $0.displayName,
+                shaderName: $0.fragment,
+                needsDepth: $0.needsDepth,
+                supportsIntensity: $0.supportsIntensity
+            )
+        }
     }
-    
-    /// Поиск фильтра по имени шейдера
+
     func filter(for shaderName: String) -> FilterDefinition? {
-        return filters.first { $0.shaderName == shaderName }
+        filters.first { $0.shaderName == shaderName }
     }
-    
-    /// ✅ FIX: Возвращает доступные фильтры в зависимости от камеры и режима записи
-    /// - isFront: true если фронтальная камера активна (depth фильтры недоступны)
-    /// - depthSupported: false если устройство не поддерживает depth
-    /// - recordingFamily: если запись активна, блокирует переключение между семействами
-    /// - isRecording: флаг активной записи
+
+    func firstNonDepthFilter() -> FilterDefinition? {
+        filters.first { !$0.needsDepth }
+    }
+
+    func firstDepthFilter() -> FilterDefinition? {
+        filters.first { $0.needsDepth }
+    }
+
     func availableFilters(
         isFront: Bool,
         depthSupported: Bool = true,
         recordingFamily: FilterFamily? = nil,
         isRecording: Bool = false
     ) -> [FilterDefinition] {
+
         var available = filters
-        
-        // 1. На фронталке - исключаем depth фильтры ВСЕГДА
+
         if isFront {
             available = available.filter { !$0.needsDepth }
-        }
-        // 2. Если запись активна - блокируем по семейству
-        else if isRecording, let family = recordingFamily {
+        } else if isRecording, let family = recordingFamily {
             switch family {
-            case .depth:
-                available = available.filter { $0.needsDepth }
-            case .nonDepth:
-                available = available.filter { !$0.needsDepth }
+            case .depth: available = available.filter { $0.needsDepth }
+            case .nonDepth: available = available.filter { !$0.needsDepth }
             }
-        }
-        // 3. Если depth не поддерживается - исключаем depth фильтры
-        else if !depthSupported {
+        } else if !depthSupported {
             available = available.filter { !$0.needsDepth }
         }
-        
+
         return available
-    }
-    
-    /// Проверяет, доступен ли фильтр для текущей камеры и режима записи
-    func isFilterAvailable(
-        _ filter: FilterDefinition,
-        isFront: Bool,
-        recordingFamily: FilterFamily? = nil,
-        isRecording: Bool = false
-    ) -> Bool {
-        // На фронталке depth недоступен
-        if isFront && filter.needsDepth {
-            return false
-        }
-        
-        // При записи проверяем семейство
-        if isRecording, let family = recordingFamily {
-            let filterFamily: FilterFamily = filter.needsDepth ? .depth : .nonDepth
-            if filterFamily != family {
-                return false
-            }
-        }
-        
-        return true
-    }
-    
-    /// Возвращает ближайший доступный non-depth фильтр
-    func firstNonDepthFilter() -> FilterDefinition? {
-        return filters.first { !$0.needsDepth }
-    }
-    
-    /// Возвращает первый depth фильтр
-    func firstDepthFilter() -> FilterDefinition? {
-        return filters.first { $0.needsDepth }
     }
 }
