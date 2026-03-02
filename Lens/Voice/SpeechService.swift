@@ -211,20 +211,15 @@ final class SpeechService: ObservableObject {
         
         recognitionRequest.shouldReportPartialResults = true
         
-        // Пробуем включить on-device распознавание если доступно
-        if #available(iOS 13.0, *) {
-            if let recognizer = speechRecognizer {
-                recognitionRequest.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
-                if recognitionRequest.requiresOnDeviceRecognition {
-                    print("🎤 SpeechService: Using on-device recognition")
-                } else {
-                    print("🎤 SpeechService: Using server-side recognition")
-                }
-            } else {
-                recognitionRequest.requiresOnDeviceRecognition = false
-            }
+        // ✅ FIX: Принудительно используем on-device распознавание
+        // Это гарантирует русскую локаль без серверных подмен
+        if let recognizer = speechRecognizer, recognizer.supportsOnDeviceRecognition {
+            recognitionRequest.requiresOnDeviceRecognition = true
+            print("🎤 SpeechService: ✅ On-device recognition ENABLED (forced)")
         } else {
+            // Fallback: устройство не поддерживает on-device
             recognitionRequest.requiresOnDeviceRecognition = false
+            print("🎤 SpeechService: ⚠️ On-device not supported, using server-side")
         }
         
         // Создаём задачу распознавания

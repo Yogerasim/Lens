@@ -40,6 +40,34 @@
 "effects_tab" = "Effets";
 "recordings_tab" = "Enregistrements";
 "close" = "Fermer";
+"tab_voice" = "Voix";
+"tab_effects" = "Effets";
+"tab_recordings" = "Enregistrements";
+
+/* MARK: - Voice Composer */
+"voice_composer_title" = "Assistant Vocal";
+"permission_required_title" = "Autorisation Requise";
+"permission_required_message" = "L'accès au microphone et à la reconnaissance vocale est requis pour les commandes vocales";
+"open_settings" = "Ouvrir les Réglages";
+"cancel" = "Annuler";
+"voice_mode" = "Voix";
+"text_mode" = "Texte";
+"voice_listening" = "Écoute...";
+"voice_processing" = "Traitement...";
+"voice_press_mic" = "Appuyez 🎤";
+"voice_enter_command" = "Saisissez une commande";
+"voice_recognized_text" = "Texte reconnu :";
+"voice_enter_command_label" = "Saisissez une commande :";
+"voice_speak" = "Parler";
+"voice_stop" = "Arrêter";
+"voice_apply" = "Appliquer";
+"voice_examples" = "Exemples :";
+"voice_commands_title" = "Commandes :";
+"voice_example_create" = "créer shader mixer comic et neural";
+"voice_example_blur" = "ajouter blur";
+"voice_example_intensity" = "intensité 70%";
+"voice_example_filter" = "comic";
+"voice_example_record" = "démarrer enregistrement";
 
 /* MARK: - Intensity Control */
 "intensity_label" = "%d %%";

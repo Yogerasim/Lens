@@ -72,54 +72,52 @@ struct VoiceComposerView: View {
     // MARK: - Body
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        isTextFieldFocused = false
-                    }
-                
-                VStack(spacing: 16) {
-                    modePicker
-                    statusIndicator
-                    inputArea
-                    exampleChips
-                    controlButtons
-                    helpSection
-                    Spacer()
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+                .onTapGesture {
+                    isTextFieldFocused = false
                 }
-                .padding()
+            
+            VStack(spacing: 16) {
+                modePicker
+                statusIndicator
+                inputArea
+                exampleChips
+                controlButtons
+                helpSection
+                Spacer()
             }
-            .navigationTitle("Voice Composer")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Закрыть") {
-                        cleanup()
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
+            .padding()
+        }
+        .navigationTitle(NSLocalizedString("voice_composer_title", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(NSLocalizedString("close", comment: "")) {
+                    cleanup()
+                    dismiss()
                 }
-                
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") {
-                        isTextFieldFocused = false
-                    }
+                .foregroundColor(.white)
+            }
+            
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isTextFieldFocused = false
                 }
             }
         }
         .preferredColorScheme(.dark)
-        .alert("Требуется разрешение", isPresented: $showPermissionAlert) {
-            Button("Открыть настройки") {
+        .alert(NSLocalizedString("permission_required_title", comment: ""), isPresented: $showPermissionAlert) {
+            Button(NSLocalizedString("open_settings", comment: "")) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }
             }
-            Button("Отмена", role: .cancel) {}
+            Button(NSLocalizedString("cancel", comment: ""), role: .cancel) {}
         } message: {
-            Text("Для голосового управления необходим доступ к микрофону и распознаванию речи")
+            Text(NSLocalizedString("permission_required_message", comment: ""))
         }
         .onDisappear {
             cleanup()

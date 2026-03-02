@@ -40,6 +40,34 @@
 "effects_tab" = "Efectos";
 "recordings_tab" = "Grabaciones";
 "close" = "Cerrar";
+"tab_voice" = "Voz";
+"tab_effects" = "Efectos";
+"tab_recordings" = "Grabaciones";
+
+/* MARK: - Voice Composer */
+"voice_composer_title" = "Asistente de Voz";
+"permission_required_title" = "Permiso Requerido";
+"permission_required_message" = "Se necesita acceso al micrófono y reconocimiento de voz para comandos de voz";
+"open_settings" = "Abrir Ajustes";
+"cancel" = "Cancelar";
+"voice_mode" = "Voz";
+"text_mode" = "Texto";
+"voice_listening" = "Escuchando...";
+"voice_processing" = "Procesando...";
+"voice_press_mic" = "Pulsa 🎤";
+"voice_enter_command" = "Escribe un comando";
+"voice_recognized_text" = "Texto reconocido:";
+"voice_enter_command_label" = "Escribe un comando:";
+"voice_speak" = "Hablar";
+"voice_stop" = "Parar";
+"voice_apply" = "Aplicar";
+"voice_examples" = "Ejemplos:";
+"voice_commands_title" = "Comandos:";
+"voice_example_create" = "crea shader mezcla comic y neural";
+"voice_example_blur" = "añade blur";
+"voice_example_intensity" = "intensidad 70%";
+"voice_example_filter" = "comic";
+"voice_example_record" = "empezar grabación";
 
 /* MARK: - Intensity Control */
 "intensity_label" = "%d%%";

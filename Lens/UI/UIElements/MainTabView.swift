@@ -1,11 +1,66 @@
 import SwiftUI
 
+// MARK: - Main Hub (Short tap) — Voice + Effects tabs
 struct MediaHubTabView: View {
 
-    /// Закрыть хаб (например, dismiss sheet)
     var onClose: (() -> Void)? = nil
+    var onSelectEffect: (FilterDefinition) -> Void
 
-    /// Выбор эффекта → применить фильтр в камере
+    // Dependencies for Voice tab
+    var cameraManager: CameraManager
+    var shaderManager: ShaderManager
+    var mediaRecorder: MediaRecorder
+    var framePipeline: FramePipeline
+
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            // Tab 1 — Voice Assistant (главный вход)
+            NavigationStack {
+                VoiceComposerView(
+                    cameraManager: cameraManager,
+                    shaderManager: shaderManager,
+                    mediaRecorder: mediaRecorder,
+                    framePipeline: framePipeline
+                )
+            }
+            .tabItem {
+                Image(systemName: "mic.fill")
+                Text(NSLocalizedString("tab_voice", comment: ""))
+            }
+            .tag(0)
+
+            // Tab 2 — Effects Library
+            NavigationStack {
+                EffectsLibraryView { filter in
+                    onSelectEffect(filter)
+                    onClose?()
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(NSLocalizedString("close", comment: "")) { onClose?() }
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    }
+                    ToolbarItem(placement: .principal) {
+                        NavigationTitleView(title: NSLocalizedString("tab_effects", comment: ""))
+                    }
+                }
+            }
+            .tabItem {
+                Image(systemName: "wand.and.stars")
+                Text(NSLocalizedString("tab_effects", comment: ""))
+            }
+            .tag(1)
+        }
+        .tint(DesignSystem.Colors.blueUniversal)
+    }
+}
+
+// MARK: - Legacy Hub (Long tap) — Recordings + Effects
+// TODO: unused for now — kept for legacy compatibility
+struct LegacyMediaHubTabView: View {
+    var onClose: (() -> Void)? = nil
     var onSelectEffect: (FilterDefinition) -> Void
 
     var body: some View {
@@ -14,17 +69,17 @@ struct MediaHubTabView: View {
                 RecordingsView()
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button("Закрыть") { onClose?() }
+                            Button(NSLocalizedString("close", comment: "")) { onClose?() }
                                 .foregroundStyle(DesignSystem.Colors.textPrimary)
                         }
                         ToolbarItem(placement: .principal) {
-                            NavigationTitleView(title: "Записи")
+                            NavigationTitleView(title: NSLocalizedString("tab_recordings", comment: ""))
                         }
                     }
             }
             .tabItem {
                 Image(systemName: "rectangle.stack")
-                Text("Записи")
+                Text(NSLocalizedString("tab_recordings", comment: ""))
             }
 
             NavigationStack {
@@ -34,17 +89,17 @@ struct MediaHubTabView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("Закрыть") { onClose?() }
+                        Button(NSLocalizedString("close", comment: "")) { onClose?() }
                             .foregroundStyle(DesignSystem.Colors.textPrimary)
                     }
                     ToolbarItem(placement: .principal) {
-                        NavigationTitleView(title: "Эффекты")
+                        NavigationTitleView(title: NSLocalizedString("tab_effects", comment: ""))
                     }
                 }
             }
             .tabItem {
                 Image(systemName: "wand.and.stars")
-                Text("Эффекты")
+                Text(NSLocalizedString("tab_effects", comment: ""))
             }
         }
         .tint(DesignSystem.Colors.blueUniversal)
@@ -52,5 +107,12 @@ struct MediaHubTabView: View {
 }
 
 #Preview {
-    MediaHubTabView(onClose: {}, onSelectEffect: { _ in })
+    MediaHubTabView(
+        onClose: {},
+        onSelectEffect: { _ in },
+        cameraManager: CameraManager(),
+        shaderManager: ShaderManager.shared,
+        mediaRecorder: MediaRecorder(),
+        framePipeline: FramePipeline.shared
+    )
 }

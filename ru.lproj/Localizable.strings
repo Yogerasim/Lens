@@ -40,6 +40,34 @@
 "effects_tab" = "Эффекты";
 "recordings_tab" = "Записи";
 "close" = "Закрыть";
+"tab_voice" = "Голос";
+"tab_effects" = "Эффекты";
+"tab_recordings" = "Записи";
+
+/* MARK: - Voice Composer */
+"voice_composer_title" = "Голосовой помощник";
+"permission_required_title" = "Требуется разрешение";
+"permission_required_message" = "Для голосового управления необходим доступ к микрофону и распознаванию речи";
+"open_settings" = "Открыть настройки";
+"cancel" = "Отмена";
+"voice_mode" = "Голос";
+"text_mode" = "Текст";
+"voice_listening" = "Слушаю...";
+"voice_processing" = "Выполняю...";
+"voice_press_mic" = "Нажмите 🎤";
+"voice_enter_command" = "Введите команду";
+"voice_recognized_text" = "Распознанный текст:";
+"voice_enter_command_label" = "Введите команду:";
+"voice_speak" = "Говорить";
+"voice_stop" = "Стоп";
+"voice_apply" = "Применить";
+"voice_examples" = "Примеры:";
+"voice_commands_title" = "Команды:";
+"voice_example_create" = "создай шейдер замиксуй комик и нейро";
+"voice_example_blur" = "добавь блюр";
+"voice_example_intensity" = "интенсивность 70%";
+"voice_example_filter" = "комик";
+"voice_example_record" = "начни запись";
 
 /* MARK: - Intensity Control */
 "intensity_label" = "%d%%";
