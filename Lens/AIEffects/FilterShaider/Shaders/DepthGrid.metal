@@ -1,3 +1,4 @@
+// DepthGrid.metal
 #include "Helpers/ShaderTypes.metalh"
 #include "Helpers/ShadersCommon.metalh"
 
@@ -10,6 +11,11 @@ static inline float2 depthUVFromCameraUV(float2 uv, constant Uniforms& u) {
     if (u.depthFlipX > 0.5) d.x = 1.0 - d.x;
     if (u.depthFlipY > 0.5) d.y = 1.0 - d.y;
     return d;
+}
+
+static inline float bayerDither(float2 uv, float2 texSize, float amp) {
+    float b = bayer4x4(uv * texSize);
+    return (b - 0.5) * amp;
 }
 
 fragment float4 fragment_depthgrid(
@@ -28,9 +34,7 @@ fragment float4 fragment_depthgrid(
     float t = premiumCurve(u.intensity);
     if (t < 0.001) return cam;
 
-    float2 dUV = uv;
-    if (u.depthFlipX > 0.5) dUV.x = 1.0 - dUV.x;
-    if (u.depthFlipY > 0.5) dUV.y = 1.0 - dUV.y;
+    float2 dUV = depthUVFromCameraUV(uv, u);
 
     float2 ds = 1.0 / float2(depthTex.get_width(), depthTex.get_height());
 
@@ -40,7 +44,7 @@ fragment float4 fragment_depthgrid(
     float dU = depthTex.sample(s, dUV + float2(0, -ds.y)).r;
     float dD = depthTex.sample(s, dUV + float2(0,  ds.y)).r;
 
-    float nd = clamp((dC - 0.25) / (5.0 - 0.25), 0.0, 1.0);
+    float nd = depth01(dC, 0.25, 5.0);
 
     float sx = (dR - dL);
     float sy = (dD - dU);
@@ -78,13 +82,26 @@ fragment float4 fragment_depthgrid(
     float fres = pow(1.0 - clamp(n.z, 0.0, 1.0), 2.0);
     float rim = fres * (0.06 + 0.20 * t);
 
+    float2 camSize = float2(camTex.get_width(), camTex.get_height());
+    float dither = bayerDither(uv, camSize, 0.010 * (0.25 + 0.75 * t));
+
     float3 out = cam.rgb;
 
     float gridMask = grid * (1.0 - objEdge * 0.55);
     out += gridCol * gridMask * glow * depthFade;
 
+    float bloom = pow(grid, 6.0) * (0.10 + 0.25 * t) * depthFade * (0.35 + 0.65 * diff);
+    out += gridCol * bloom;
+
     out += whiteEdge * edgeGlow;
     out += float3(0.75, 1.0, 0.90) * rim;
+
+    float shadeLevels = mix(18.0, 9.0, t);
+    float diffQ = floor(diff * shadeLevels + 0.5) / shadeLevels;
+    diffQ = clamp(diffQ + dither, 0.0, 1.0);
+
+    float3 geoTint = mix(float3(0.06), float3(0.18), diffQ);
+    out = mix(out, out + geoTint * (0.18 + 0.18 * t), (0.25 + 0.35 * t) * (1.0 - nd) * (1.0 - objEdge));
 
     out = gentleTonemap(out);
     out = softContrast(out, 0.18 + 0.22 * t);
