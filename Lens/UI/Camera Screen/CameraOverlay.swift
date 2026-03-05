@@ -150,16 +150,18 @@ struct CameraOverlay: View {
             .offset(x: effectsOffset.x, y: effectsOffset.y)
 
             Button {
-                let generator = UIImpactFeedbackGenerator(style: .light)
+                let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                isDemoPresented = true
+
+                shaderManager.stopDemo()
+                isMediaHubPresented = true
             } label: {
-                Image(systemName: "shuffle")
+                Image(systemName: "wand.and.stars")
                     .font(.title2)
                     .foregroundColor(.white)
                     .glassCircle(size: 54)
             }
-            .offset(x: demoOffset.x, y: demoOffset.y)
+            .offset(x: effectsOffset.x, y: effectsOffset.y)
         }
         .padding(.bottom, 8)
     }

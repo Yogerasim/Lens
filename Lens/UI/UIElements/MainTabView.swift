@@ -1,12 +1,10 @@
 import SwiftUI
 
-// MARK: - Main Hub (Short tap) — Voice + Effects tabs
 struct MediaHubTabView: View {
 
     var onClose: (() -> Void)? = nil
     var onSelectEffect: (FilterDefinition) -> Void
 
-    // Dependencies for Voice tab
     var cameraManager: CameraManager
     var shaderManager: ShaderManager
     var mediaRecorder: MediaRecorder
@@ -16,7 +14,7 @@ struct MediaHubTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Tab 1 — Voice Assistant (главный вход)
+
             NavigationStack {
                 VoiceComposerView(
                     cameraManager: cameraManager,
@@ -31,7 +29,6 @@ struct MediaHubTabView: View {
             }
             .tag(0)
 
-            // Tab 2 — Effects Library
             NavigationStack {
                 EffectsLibraryView { filter in
                     onSelectEffect(filter)
@@ -52,13 +49,29 @@ struct MediaHubTabView: View {
                 Text(NSLocalizedString("tab_effects", comment: ""))
             }
             .tag(1)
+
+            NavigationStack {
+                ShaderDemoControls()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(NSLocalizedString("close", comment: "")) { onClose?() }
+                                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        }
+                        ToolbarItem(placement: .principal) {
+                            NavigationTitleView(title: "Demo")
+                        }
+                    }
+            }
+            .tabItem {
+                Image(systemName: "shuffle")
+                Text("Demo")
+            }
+            .tag(2)
         }
         .tint(DesignSystem.Colors.blueUniversal)
     }
 }
 
-// MARK: - Legacy Hub (Long tap) — Recordings + Effects
-// TODO: unused for now — kept for legacy compatibility
 struct LegacyMediaHubTabView: View {
     var onClose: (() -> Void)? = nil
     var onSelectEffect: (FilterDefinition) -> Void

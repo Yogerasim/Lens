@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CaptureControls: View {
 
@@ -6,9 +7,11 @@ struct CaptureControls: View {
     @ObservedObject var mediaRecorder: MediaRecorder
     @Binding var isFlashing: Bool
 
+    var onLongPress: (() -> Void)? = nil
+    var longPressDuration: Double = 0.5
+
     var body: some View {
         HStack(spacing: 0) {
-            // слева пусто — место под будущую кнопку/галерею если понадобится
             Color.clear.frame(width: 70)
 
             Spacer()
@@ -17,7 +20,6 @@ struct CaptureControls: View {
                 handleCapture()
             } label: {
                 ZStack {
-                    // внешний контур
                     Circle()
                         .stroke(Color.white.opacity(0.95), lineWidth: 4)
                         .frame(width: 70, height: 70)
@@ -38,15 +40,21 @@ struct CaptureControls: View {
                             .frame(width: 54, height: 54)
                     }
                 }
-                // лёгкий “glass highlight” при нажатии, но без изменения размеров
                 .overlay(
                     Circle()
                         .fill(.white.opacity(0.06))
                         .frame(width: 70, height: 70)
-                        .opacity(0) // базово невидим
+                        .opacity(0)
                 )
             }
             .buttonStyle(.plain)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: longPressDuration)
+                    .onEnded { _ in
+                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                        onLongPress?()
+                    }
+            )
 
             Spacer()
 
@@ -59,24 +67,20 @@ struct CaptureControls: View {
     private func handleCapture() {
         if mediaRecorder.captureMode == .video {
             if mediaRecorder.isRecording {
-                // ✅ FIX: Останавливаем запись через FramePipeline для стабильности
                 FramePipeline.shared.stopRecording()
                 mediaRecorder.stopRecording()
             } else {
-                // ✅ FIX: Запускаем запись через FramePipeline для стабильности
                 FramePipeline.shared.startRecording()
                 mediaRecorder.startRecording()
             }
         } else {
-            // Анимация затемнения при съёмке фото
             withAnimation(.easeOut(duration: 0.1)) {
                 isFlashing = true
             }
-            
+
             mediaRecorder.takePhoto()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            
-            // Убираем затемнение через короткое время
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 withAnimation(.easeOut(duration: 0.2)) {
                     isFlashing = false
