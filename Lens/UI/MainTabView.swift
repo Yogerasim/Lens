@@ -1,10 +1,6 @@
 import SwiftUI
 
-// MARK: - MediaHubTabView (configurable tabs)
-
 struct MediaHubTabView: View {
-
-    // MARK: Dependencies
 
     var onClose: (() -> Void)? = nil
     var onSelectEffect: (FilterDefinition) -> Void
@@ -14,13 +10,11 @@ struct MediaHubTabView: View {
     var mediaRecorder: MediaRecorder
     var framePipeline: FramePipeline
 
-    // MARK: Tabs
-
     enum TabID: Int, CaseIterable, Hashable {
-        case voice
         case effects
-        case demo
+        case voice
         case recordings
+        case demo
     }
 
     struct TabItem: Identifiable, Hashable {
@@ -31,18 +25,14 @@ struct MediaHubTabView: View {
     }
 
     static var defaultTabs: [TabItem] = [
-        .init(id: .voice,   title: NSLocalizedString("tab_voice", comment: ""),   systemImage: "mic.fill",        isEnabled: true),
-        .init(id: .effects, title: NSLocalizedString("tab_effects", comment: ""), systemImage: "wand.and.stars",  isEnabled: true),
-        .init(id: .demo,    title: "Demo",                                         systemImage: "shuffle",        isEnabled: true),
+        .init(id: .effects,    title: NSLocalizedString("tab_effects", comment: ""),    systemImage: "wand.and.stars",  isEnabled: true),
+        .init(id: .voice,      title: NSLocalizedString("tab_voice", comment: ""),      systemImage: "mic.fill",        isEnabled: true),
+        .init(id: .recordings, title: NSLocalizedString("tab_recordings", comment: ""), systemImage: "rectangle.stack", isEnabled: true),
+        .init(id: .demo,       title: "Demo", systemImage: "shuffle",         isEnabled: true),
     ]
 
     var tabs: [TabItem] = Self.defaultTabs
-
-    // MARK: State
-
-    @State private var selectedTab: TabID = .voice
-
-    // MARK: Body
+    @State private var selectedTab: TabID = .effects
 
     var body: some View {
         let enabled = tabs.filter { $0.isEnabled }
@@ -73,8 +63,6 @@ struct MediaHubTabView: View {
         }
     }
 
-    // MARK: Tab content
-
     @ViewBuilder
     private func content(for tab: TabID) -> some View {
         switch tab {
@@ -98,21 +86,19 @@ struct MediaHubTabView: View {
                 .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_effects", comment: "")) }
             }
 
-        case .demo:
-            NavigationStack {
-                ShaderDemoControls()
-                    .toolbar { closeAndTitleToolbar(title: "Demo") }
-            }
-
         case .recordings:
             NavigationStack {
                 RecordingsView()
                     .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_recordings", comment: "")) }
             }
+
+        case .demo:
+            NavigationStack {
+                ShaderDemoControls()
+                    .toolbar { closeAndTitleToolbar(title: "Demo") }
+            }
         }
     }
-
-    // MARK: Toolbar builder
 
     @ToolbarContentBuilder
     private func closeAndTitleToolbar(title: String) -> some ToolbarContent {
@@ -125,8 +111,6 @@ struct MediaHubTabView: View {
         }
     }
 }
-
-// MARK: - LegacyMediaHubTabView (also configurable)
 
 struct LegacyMediaHubTabView: View {
     var onClose: (() -> Void)? = nil
@@ -222,4 +206,5 @@ struct LegacyMediaHubTabView: View {
         mediaRecorder: MediaRecorder(),
         framePipeline: FramePipeline.shared
     )
+    .environmentObject(AppMediaStore())
 }

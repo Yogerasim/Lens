@@ -25,7 +25,6 @@ struct RecordingsView: View {
     }
 
     private func share(_ item: CaptureItem) {
-        // тут позже подключишь UIActivityViewController с реальным URL
         print("Share: \(item.id)")
     }
 }

@@ -1,6 +1,5 @@
 enum ShaderRegistry {
     static let all: [ShaderDescriptor] = [
-        // Добавь эти элементы в ShaderRegistry.all (внутрь массива)
         .init(id: "depthIridescent", displayName: "Night Vision",
               fragment: "fragment_depthiridescent",
               icon: "sparkle.magnifyingglass", needsDepth: true, supportsIntensity: true, family: .depth),
