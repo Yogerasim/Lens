@@ -1,13 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct CameraOverlay: View {
 
-    // MARK: - Move only these two blocks (relative to safe areas)
-
-    private let topBlockOffset    = CGPoint(x: 0, y: 0)  // +y = ниже от верха safe area
-    private let bottomBlockOffset = CGPoint(x: 0, y: -310)  // +y = выше от низа safe area
-
-    // MARK: - Internal layout (фиксированно внутри блоков)
+    private let topBlockOffset    = CGPoint(x: 0, y: 0)
+    private let bottomBlockOffset = CGPoint(x: 0, y: -310)
 
     private let fpsOffset        = CGPoint(x: 0, y: 0)
 
@@ -18,38 +15,34 @@ struct CameraOverlay: View {
     private let switchCamOffset  = CGPoint(x: 100, y: -70)
     private let effectsOffset    = CGPoint(x: -100, y: -70)
 
-    // MARK: - Dependencies
+    private let demoOffset       = CGPoint(x: 0, y: -70)
 
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var mediaRecorder: MediaRecorder
     @ObservedObject var fps: FPSCounter
     @ObservedObject var framePipeline = FramePipeline.shared
-    
+
+    @State private var isDemoPresented = false
     @State private var isMediaHubPresented = false
-    @State private var isLegacyHubPresented = false  // TODO: unused for now
+    @State private var isLegacyHubPresented = false
     @State private var isFlashing = false
 
     var body: some View {
-        // ВАЖНО: этот слой всегда занимает весь экран
         Color.clear
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
 
-            // ✅ TOP pinned
             .overlay(alignment: .top) {
                 topBlock
                     .offset(x: topBlockOffset.x, y: topBlockOffset.y)
             }
 
-            // ✅ BOTTOM pinned
             .overlay(alignment: .bottom) {
                 bottomBlock
-                    // для низа: +y должно поднимать вверх
                     .offset(x: bottomBlockOffset.x, y: -bottomBlockOffset.y)
             }
-            
-            // ✅ FLASH overlay для эффекта съёмки фото
+
             .overlay {
                 if isFlashing {
                     Rectangle()
@@ -59,7 +52,7 @@ struct CameraOverlay: View {
                         .allowsHitTesting(false)
                 }
             }
-            
+
             .sheet(isPresented: $isMediaHubPresented) {
                 MediaHubTabView(
                     onClose: {
@@ -76,21 +69,20 @@ struct CameraOverlay: View {
                     framePipeline: framePipeline
                 )
             }
-            
-            // TODO: Legacy hub — unused for now
+
             .sheet(isPresented: $isLegacyHubPresented) {
                 LegacyMediaHubTabView(
-                    onClose: {
-                        isLegacyHubPresented = false
-                    },
+                    onClose: { isLegacyHubPresented = false },
                     onSelectEffect: { filter in
                         shaderManager.selectShader(by: filter.shaderName)
                     }
                 )
             }
-    }
 
-    // MARK: - Top block (pinned)
+            .sheet(isPresented: $isDemoPresented) {
+                ShaderDemoControls()
+            }
+    }
 
     private var topBlock: some View {
         CameraTopBar(
@@ -99,10 +91,8 @@ struct CameraOverlay: View {
             fps: fps
         )
         .offset(x: fpsOffset.x, y: fpsOffset.y)
-        .padding(Edge.Set.top, 8) // небольшая “камера-айфон” поправка
+        .padding(.top, 8)
     }
-
-    // MARK: - Bottom block (pinned)
 
     private var bottomBlock: some View {
         ZStack {
@@ -123,7 +113,6 @@ struct CameraOverlay: View {
                 .offset(x: modeOffset.x, y: modeOffset.y)
                 .zIndex(10)
 
-            // Кнопка переключения камеры - скрыта в depth режиме
             if !framePipeline.isDepthModeActive {
                 Button { cameraManager.switchCamera() } label: {
                     Image(systemName: "camera.rotate.fill")
@@ -134,11 +123,12 @@ struct CameraOverlay: View {
                 .offset(x: switchCamOffset.x, y: switchCamOffset.y)
             }
 
-            // Кнопка эффектов/голосового управления
-            // tap: MediaHub (Voice + Effects), long press: Legacy hub (TODO)
             Button {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
+
+                shaderManager.stopDemo()
+
                 isMediaHubPresented = true
             } label: {
                 Image(systemName: "wand.and.stars")
@@ -151,12 +141,27 @@ struct CameraOverlay: View {
                     .onEnded { _ in
                         let generator = UIImpactFeedbackGenerator(style: .heavy)
                         generator.impactOccurred()
+
+                        shaderManager.stopDemo()
+
                         isLegacyHubPresented = true
                     }
             )
             .offset(x: effectsOffset.x, y: effectsOffset.y)
+
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                isDemoPresented = true
+            } label: {
+                Image(systemName: "shuffle")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .glassCircle(size: 54)
+            }
+            .offset(x: demoOffset.x, y: demoOffset.y)
         }
-        .padding(Edge.Set.bottom, 8) // аналогично — аккуратно отступить от края
+        .padding(.bottom, 8)
     }
 }
 

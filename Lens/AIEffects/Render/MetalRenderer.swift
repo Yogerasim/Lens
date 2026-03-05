@@ -220,8 +220,8 @@ final class MetalRenderer: RenderEngine {
         let depthFlipX: Float = 0.0
         let depthFlipY: Float = isLiDARMode ? 1.0 : 0.0
         
-        // Effect intensity
-        let intensity = FramePipeline.shared.effectIntensityForMetal
+        let intensity: Float = Float(FramePipeline.shared.effectIntensityForMetal)
+        let demoPhase: Float = FramePipeline.shared.demoPhase
 
         var uniforms = ShaderUniforms(
             time: shaderManager.animationTime,
@@ -235,7 +235,8 @@ final class MetalRenderer: RenderEngine {
             intensity: intensity,
             effectiveTextureAspect: effectiveTextureAspect,
             uvScaleX: uvScaleX,
-            uvScaleY: uvScaleY
+            uvScaleY: uvScaleY,
+            demoPhase: demoPhase
         )
         
         // ✅ Проверяем изменения для печати при смене ориентации/камеры

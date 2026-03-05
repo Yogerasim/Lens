@@ -1,6 +1,9 @@
 enum ShaderRegistry {
     static let all: [ShaderDescriptor] = [
         // Добавь эти элементы в ShaderRegistry.all (внутрь массива)
+        .init(id: "depthIridescent", displayName: "Night Vision",
+              fragment: "fragment_depthiridescent",
+              icon: "sparkle.magnifyingglass", needsDepth: true, supportsIntensity: true, family: .depth),
         .init(id: "neonEdge", displayName: "Neon Edge",
               fragment: "fragment_neonedge",
               icon: "bolt.circle.fill",
@@ -119,6 +122,11 @@ enum ShaderRegistry {
 
         .init(id: "depthThermal", displayName: "Depth Thermal", fragment: "fragment_depththermal",
               icon: "thermometer.sun.fill", needsDepth: true, supportsIntensity: true, family: .depth),
+        .init(id: "depthComicThermal",
+              displayName: "Depth Comic Thermo",
+              fragment: "fragment_depthcomicthermal",
+              icon: "camera.filters",
+              needsDepth: true, supportsIntensity: true, family: .depth),
 
         .init(id: "customGraph", displayName: "Custom Graph", fragment: "fragment_universalgraph",
               icon: "square.stack.3d.up.fill", needsDepth: false, supportsIntensity: true, family: .nonDepth),

@@ -14,4 +14,5 @@ struct ShaderUniforms {
     var effectiveTextureAspect: Float
     var uvScaleX: Float
     var uvScaleY: Float
+    var demoPhase: Float
 }

@@ -15,6 +15,7 @@ struct Uniforms {
     float effectiveTextureAspect;
     float uvScaleX;
     float uvScaleY;
+    float demoPhase;
 };
 
 struct VertexOut {
