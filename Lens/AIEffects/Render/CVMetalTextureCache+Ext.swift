@@ -1,21 +1,21 @@
-import Metal
 import CoreVideo
+import Metal
 
 final class TextureCache {
 
-    static let shared = TextureCache()
+  static let shared = TextureCache()
 
-    let cache: CVMetalTextureCache
+  let cache: CVMetalTextureCache
 
-    private init() {
-        var cache: CVMetalTextureCache?
-        CVMetalTextureCacheCreate(
-            kCFAllocatorDefault,
-            nil,
-            MetalContext.shared.device,
-            nil,
-            &cache
-        )
-        self.cache = cache!
-    }
+  private init() {
+    var cache: CVMetalTextureCache?
+    CVMetalTextureCacheCreate(
+      kCFAllocatorDefault,
+      nil,
+      MetalContext.shared.device,
+      nil,
+      &cache
+    )
+    self.cache = cache!
+  }
 }

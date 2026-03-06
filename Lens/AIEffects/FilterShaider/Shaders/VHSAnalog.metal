@@ -1,4 +1,3 @@
-// VHSAnalog.metal
 #include "Helpers/ShaderTypes.metalh"
 #include "Helpers/ShadersCommon.metalh"
 

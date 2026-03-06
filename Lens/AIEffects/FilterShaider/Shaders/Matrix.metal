@@ -31,21 +31,21 @@ fragment float4 fragment_matrix(
     float2 ip = floor(p);
     float2 fp = fract(p);
 
-    // скорость падения по колонкам
+    
     float colSeed = hash12(float2(ip.x, 17.0));
     float speed = mix(0.45, 1.25, colSeed);
 
     float head = fract(-u.time * speed + colSeed);
     float dist = abs(fp.y - head);
 
-    // голова яркая, хвост длинный
+    
     float headMask = smoothstep(0.10, 0.0, dist);
     float tail = smoothstep(0.55, 0.0, fp.y - head);
     tail *= smoothstep(0.0, 0.95, head - fp.y);
 
     float trail = max(headMask, tail * 0.55);
 
-    // “глиф” — маленькие прямоугольники внутри клетки
+    
     float glyphSeed = hash12(ip + float2(3.1, 7.7));
     float2 g = fp - 0.5;
     float gx = 1.0 - smoothstep(0.18, 0.22, abs(g.x + (glyphSeed - 0.5) * 0.12));
@@ -54,18 +54,18 @@ fragment float4 fragment_matrix(
 
     float strength = trail * glyph;
 
-    // цвет: зелёный матричный, с небольшим неоном
+    
     float3 green = float3(0.08, 1.0, 0.35);
     float3 neon  = float3(0.55, 1.0, 0.70);
     float3 codeColor = mix(green, neon, headMask);
 
-    // фон: камера в моно + лёгкое затемнение
+    
     float camL = luma709(cam.rgb);
     float3 base = float3(camL) * (0.55 + 0.20 * (1.0 - t));
 
     float3 over = base + codeColor * (0.35 + 0.85 * t) * strength;
 
-    // лёгкий “bloom” на голове (дёшево)
+    
     over += codeColor * headMask * (0.08 + 0.18 * t);
 
     float3 outC = mix(cam.rgb, over, t);

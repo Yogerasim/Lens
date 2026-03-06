@@ -1,14 +1,12 @@
 #include "Helpers/ShaderTypes.metalh"
 #include "Helpers/ShadersCommon.metalh"
 
-// Grain
 float3 applyGrain(float3 color, float2 uv, float time, float intensity) {
     float noise = fract(sin(dot(uv * 1000.0, float2(12.9898, 78.233)) + time) * 43758.5453);
     noise = (noise - 0.5) * 0.3 * intensity;
     return color + float3(noise);
 }
 
-// Outline
 float3 applyOutline(float3 color, float2 uv, texture2d<float> tex, sampler s, float intensity) {
     float2 texSize = float2(tex.get_width(), tex.get_height());
     float2 ps = 1.0 / texSize;
@@ -30,7 +28,6 @@ float3 applyOutline(float3 color, float2 uv, texture2d<float> tex, sampler s, fl
     return mix(color, float3(0.0), edgeMask);
 }
 
-// Blur (5-tap)
 float3 applyBlur(float2 uv, texture2d<float> tex, sampler s, float intensity) {
     float2 texSize = float2(tex.get_width(), tex.get_height());
     float2 ps = 1.0 / texSize * intensity * 3.0;
@@ -44,7 +41,6 @@ float3 applyBlur(float2 uv, texture2d<float> tex, sampler s, float intensity) {
     return sum / 5.0;
 }
 
-// Color shift
 float3 applyColorShift(float3 color, float time, float intensity) {
     float shift = time * 0.5 * intensity;
 
@@ -80,7 +76,6 @@ float3 applyColorShift(float3 color, float time, float intensity) {
     return rgb + m;
 }
 
-// Vignette
 float3 applyVignette(float3 color, float2 uv, float intensity) {
     float2 center = uv - 0.5;
     float dist = length(center);
@@ -88,7 +83,6 @@ float3 applyVignette(float3 color, float2 uv, float intensity) {
     return color * vignette;
 }
 
-// MARK: - Universal Graph Fragment
 fragment float4 fragment_universalgraph(
     VertexOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]],

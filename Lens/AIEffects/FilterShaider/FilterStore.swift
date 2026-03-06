@@ -1,11 +1,11 @@
-import Foundation
 import Combine
+import Foundation
 
 @MainActor
 final class FilterStore: ObservableObject {
-    static let shared = FilterStore()
+  static let shared = FilterStore()
 
-    @Published var active: FilterDefinition = FilterLibrary.shared.filters.first!
+  @Published var active: FilterDefinition = FilterLibrary.shared.filters.first!
 
-    private init() {}
+  private init() {}
 }

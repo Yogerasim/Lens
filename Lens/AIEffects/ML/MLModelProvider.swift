@@ -2,16 +2,15 @@ import CoreML
 
 final class MLModelProvider {
 
-    let model: MLModel
+  let model: MLModel
 
-    init() throws {
-        let config = MLModelConfiguration()
-        config.computeUnits = .all
-        config.allowLowPrecisionAccumulationOnGPU = true
+  init() throws {
+    let config = MLModelConfiguration()
+    config.computeUnits = .all
+    config.allowLowPrecisionAccumulationOnGPU = true
 
-        // ⚠️ ЗАГЛУШКА
-        self.model = try MLModel(
-            contentsOf: URL(fileURLWithPath: "")
-        )
-    }
+    self.model = try MLModel(
+      contentsOf: URL(fileURLWithPath: "")
+    )
+  }
 }

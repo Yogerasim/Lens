@@ -97,7 +97,7 @@ fragment float4 fragment_depthcomicthermal(
     float depthEdge = abs(dR - dL) + abs(dD - dU);
     float objEdge = smoothstep(0.010, 0.045, depthEdge);
 
-    // --- DepthSolidThermal base (с квантизацией глубины как “постер”)
+    
     float shadeLevels = mix(18.0, 8.0, t);
     float q = floor(nd * shadeLevels + 0.5) / shadeLevels;
 
@@ -118,7 +118,7 @@ fragment float4 fragment_depthcomicthermal(
     float edgeBright = objEdge * (0.10 + 0.35 * t) * (0.35 + 0.65 * ndotl);
     thermo += float3(0.95, 0.98, 1.0) * edgeBright;
 
-    // --- Comic layer (по камере)
+    
     float3 comic = cam.rgb;
     comic = gentleTonemap(comic);
     comic = softContrast(comic, 0.55 * t);
@@ -139,7 +139,7 @@ fragment float4 fragment_depthcomicthermal(
     float3 ink = float3(0.02, 0.03, 0.05);
     comic = mix(comic, ink, eMask * (0.10 + 0.42 * t));
 
-    // --- Mix strategy: термо отвечает за “геометрию”, комик за “читабельность”
+    
     float thermoMix = (0.55 + 0.25 * t);
     float3 out = mix(comic, thermo, thermoMix);
 
