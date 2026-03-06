@@ -31,14 +31,6 @@ The project focuses on building a **high-performance rendering pipeline** capabl
 
 ---
 
-## Project Goal
-
-Lens is built as a **research and portfolio project** exploring advanced real-time graphics techniques on mobile devices, including shader pipelines, camera processing, and interactive visual systems.
-
-The goal is to demonstrate how modern iPhones can act as **real-time GPU visual engines**, similar to tools like TouchDesigner or Resolume, but running natively on mobile hardware.
-
----
-
 ## License
 
 Copyright © Philip Gerasimov. All rights reserved.
