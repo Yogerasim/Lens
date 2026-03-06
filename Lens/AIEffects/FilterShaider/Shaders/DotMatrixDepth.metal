@@ -74,8 +74,7 @@ fragment float4 fragment_dotmatrixdepth(
     float2 grid = floor(uv * texSize / cellPx);
     float2 cellUV = fract(uv * texSize / cellPx);
 
-    float2 gp = grid;
-    float n = fract(sin(dot(gp, float2(127.1, 311.7))) * 43758.5453);
+    
 
     float lum = luma709(src.rgb);
     float fill = mix(0.48, 0.18, lum);

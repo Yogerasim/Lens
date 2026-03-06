@@ -22,9 +22,6 @@ fragment float4 fragment_matrix(
     float t = premiumCurve(u.intensity);
     if (t < 0.001) return cam;
 
-    float2 res = float2(camTex.get_width(), camTex.get_height());
-
-    // Колонки/ячейки: чем больше t, тем плотнее “код”
     float cellX = mix(90.0, 140.0, t);
     float cellY = cellX * 1.6;
 

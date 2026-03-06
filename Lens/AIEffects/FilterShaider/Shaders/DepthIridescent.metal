@@ -80,7 +80,6 @@ fragment float4 fragment_depthiridescent(
     float curv = curvature5(depthTex, s, duv, dpx);
     float edge = smoothstep(0.004, 0.018, curv);
 
-    float speed = 2.7 * t;
     float amp   = mix(0.55, 1.75, t);
 
     float timeScaled = u.demoPhase;

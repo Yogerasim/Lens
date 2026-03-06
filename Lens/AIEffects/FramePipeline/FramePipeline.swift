@@ -223,7 +223,6 @@ final class FramePipeline: ObservableObject {
         orientationCancellable = OrientationManager.shared.$rotationAngle
             .sink { [weak self] newRotation in
                 self?.interfaceRotation = newRotation
-                let degrees = Int(newRotation * 180 / .pi)
             }
     }
 

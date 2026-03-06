@@ -169,24 +169,15 @@ final class MetalRenderer: RenderEngine {
         let bufferWidth = CVPixelBufferGetWidth(pixelBuffer)
         let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
         
-        // ✅ FIX: Rotation определяется по РЕАЛЬНЫМ размерам буфера
         let rotation: Float
-        let rotationReason: String
-        
+
         if bufferHeight > bufferWidth {
-            // Буфер уже portrait (iPad 3024x4032, LiDAR 1080x1920) - НЕ вращаем
             rotation = 0.0
-            rotationReason = "portrait-buffer (h>w) => 0°"
         } else if bufferWidth > bufferHeight {
-            // Буфер landscape (iPhone 3840x2160) - вращаем на 90°
             rotation = Float.pi / 2.0
-            rotationReason = "landscape-buffer (w>h) => 90°"
         } else {
             rotation = 0.0
-            rotationReason = "square-buffer => 0°"
         }
-        
-        // ✅ FIX: Вычисляем effectiveTextureAspect с учётом rotation
         let isRotated90 = abs(sin(rotation)) > 0.9
         let effectiveTextureAspect: Float
         if isRotated90 {
@@ -237,53 +228,21 @@ final class MetalRenderer: RenderEngine {
             demoPhase: demoPhase
         )
         
-        // ✅ Проверяем изменения для печати при смене ориентации/камеры
         let currentDrawableSize = metalLayer.drawableSize
         let currentBufferSize = (bufferWidth, bufferHeight)
         let orientationChanged = currentDrawableSize != lastDrawableSize
         let cameraChanged = currentBufferSize != lastBufferSize
         let shouldPrintDiagnostic = isFirstFrame || orientationChanged || cameraChanged
-        
+
         if shouldPrintDiagnostic {
             lastDrawableSize = currentDrawableSize
             lastBufferSize = currentBufferSize
             isFirstFrame = false
-            
-            let rotationDegrees = Int(rotation * 180 / .pi)
-            let deviceType = cameraManager?.activeVideoDevice?.deviceType.rawValue ?? "unknown"
-            let isFront = cameraManager?.isFrontCamera ?? false
-            let deviceIdiom = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-            let contentsScale = metalLayer.contentsScale
-            let isDepthEnabled = cameraManager?.isDepthEnabled ?? false
-            let boundsW = metalLayer.frame.width
-            let boundsH = metalLayer.frame.height
-            
-            let changeReason = isFirstFrame ? "FIRST_FRAME" : (orientationChanged ? "ORIENTATION_CHANGED" : "CAMERA_CHANGED")
-            
         }
-        
-        // Дополнительная периодическая диагностика (раз в 2 секунды)
+
         let now = CACurrentMediaTime()
         if now - lastDiagnosticPrintTime > diagnosticPrintInterval {
             lastDiagnosticPrintTime = now
-            
-            let rotationDegrees = Int(rotation * 180 / .pi)
-            let deviceType = cameraManager?.activeVideoDevice?.deviceType.rawValue ?? "unknown"
-            let isFront = cameraManager?.isFrontCamera ?? false
-            let deviceIdiom = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-            let contentsScale = metalLayer.contentsScale
-            let isDepthEnabled = cameraManager?.isDepthEnabled ?? false
-            
-            // Bounds в points (из frame)
-            let boundsW = metalLayer.frame.width
-            let boundsH = metalLayer.frame.height
-            
-            
-            // Логируем depth если есть
-            if let depthBuffer = depthPixelBuffer {
-                let depthW = CVPixelBufferGetWidth(depthBuffer)
-                let depthH = CVPixelBufferGetHeight(depthBuffer)
-            }
         }
 
         guard let commandBuffer = queue.makeCommandBuffer() else { return }
@@ -300,14 +259,12 @@ final class MetalRenderer: RenderEngine {
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<ShaderUniforms>.size, index: 0)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<ShaderUniforms>.size, index: 0)
         encoder.setFragmentTexture(inputTexture, index: 0)
-        encoder.setFragmentTexture(depthTexture, index: 1)  // Depth texture at index 1
+        encoder.setFragmentTexture(depthTexture, index: 1)
         
-        // Если это Custom Graph shader — передаём дополнительные данные графа
         if shaderManager.currentFragment == "fragment_universalgraph" {
             let graphSession = GraphSessionController.shared
             let graphUniforms = graphSession.getGraphUniforms(hasDepth: hasDepth > 0.5)
             
-            // Передаём типы узлов как массив int
             var nodeTypes: [Int32] = [
                 graphUniforms.nodeTypes.0, graphUniforms.nodeTypes.1,
                 graphUniforms.nodeTypes.2, graphUniforms.nodeTypes.3,

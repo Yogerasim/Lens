@@ -322,12 +322,12 @@ struct VoiceComposerView: View {
 
         let command = VoiceCommandParser.parse(recognizedText)
 
-        let result: ExecResult = VoiceCommandExecutor.execute(
+        let result = VoiceCommandExecutor.execute(
             command,
             cameraManager: cameraManager,
             shaderManager: shaderManager,
             mediaRecorder: mediaRecorder,
-            framePipeline: framePipeline
+            framePipeline: FramePipeline.shared
         )
 
         // ✅ статус берём не из эмодзи, а из result.status

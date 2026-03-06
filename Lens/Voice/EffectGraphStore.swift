@@ -63,10 +63,8 @@ final class EffectGraphStore: ObservableObject {
         }
     }
     
-    /// Удаляет граф по ID
     func remove(id: UUID) {
         if let index = graphs.firstIndex(where: { $0.id == id }) {
-            let name = graphs[index].name
             graphs.remove(at: index)
             save()
         }

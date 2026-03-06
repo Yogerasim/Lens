@@ -58,9 +58,6 @@ final class MetalHostView: UIView {
         if lastDrawableSize != drawableSize {
             lastDrawableSize = drawableSize
             metalLayer.drawableSize = drawableSize
-            
-            // Диагностика для iPad vs iPhone
-            let deviceType = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
         }
     }
     

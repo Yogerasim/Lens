@@ -10,7 +10,7 @@ struct VoiceCommandExecutor {
         cameraManager: CameraManager,
         shaderManager: ShaderManager,
         mediaRecorder: MediaRecorder,
-        framePipeline: FramePipeline = .shared
+        framePipeline: FramePipeline
     ) -> ExecResult {
         
         
@@ -215,7 +215,6 @@ struct VoiceCommandExecutor {
     
     // MARK: - Create Effect from Recipe
     
-    @MainActor
     private static func executeCreateEffect(
         _ recipe: EffectRecipe,
         shaderManager: ShaderManager,
@@ -293,14 +292,12 @@ struct VoiceCommandExecutor {
     
     // MARK: - Private Helpers
     
-    @MainActor
     private static func activateCustomGraphMode(shaderManager: ShaderManager) {
         if let customFilter = FilterLibrary.shared.filters.first(where: { $0.shaderName == "fragment_universalgraph" }) {
             shaderManager.selectShader(by: customFilter.shaderName)
         }
     }
     
-    @MainActor
     private static func deactivateCustomGraphMode(shaderManager: ShaderManager) {
         if let firstFilter = FilterLibrary.shared.filters.first(where: { $0.shaderName != "fragment_universalgraph" }) {
             shaderManager.selectShader(by: firstFilter.shaderName)

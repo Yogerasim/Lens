@@ -105,11 +105,8 @@ extension DepthManager: AVCaptureDepthDataOutputDelegate {
         // ✅ FIX: Обновляем hold-last depth buffer для записи
         FramePipeline.shared.updateRecordingDepthBuffer(depthMap)
 
-        // Логи троттлим отдельно
         if lastLogTime.isValid == false || CMTimeSubtract(timestamp, lastLogTime) > logInterval {
             lastLogTime = timestamp
-            let w = CVPixelBufferGetWidth(depthMap)
-            let h = CVPixelBufferGetHeight(depthMap)
         }
 
         onDepthMap?(depthMap, timestamp)

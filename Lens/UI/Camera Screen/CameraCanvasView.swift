@@ -30,26 +30,19 @@ struct CameraCanvasView: View {
                 
                 MetalView(renderer: renderer)
                     .aspectRatio(9.0 / 16.0, contentMode: .fit)
-                    .onReceive(orientationManager.$currentOrientation) { _ in
-                        let width = Int(renderer.metalLayer.drawableSize.width)
-                        let height = Int(renderer.metalLayer.drawableSize.height)
-                    }
                 
                 VStack(spacing: 0) {
-                    // Верхние 2/3 — только intensity + смена эффектов
                     Color.clear
                         .frame(height: upperZoneHeight)
                         .contentShape(Rectangle())
                         .gesture(upperZoneGestures)
                     
-                    // Нижняя 1/3 — только zoom pinch
                     Color.clear
                         .frame(height: lowerZoneHeight)
                         .contentShape(Rectangle())
                         .gesture(lowerZoomGestures)
                 }
                 
-                // Glass Intensity HUD
                 HStack {
                     GlassIntensityHUD(
                         value: framePipeline.smoothedIntensity,

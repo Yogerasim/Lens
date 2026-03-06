@@ -38,8 +38,6 @@ final class OrientationManager: ObservableObject {
         if newOrientation != currentOrientation {
             currentOrientation = newOrientation
             rotationAngle = newRotationAngle
-            
-            let degrees = Int(newRotationAngle * 180 / .pi)
         }
     }
     

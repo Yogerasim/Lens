@@ -107,34 +107,30 @@ final class MediaRecorder: NSObject, ObservableObject {
                 self.sessionStarted = true
             }
             
-            // Пропускаем кадры с неправильным временем (раньше начала сессии)
+            // Пропускаем кадры с неправильным временем
             guard let baseTime = self.sessionBaseTime else { return }
             if CMTimeCompare(sampleTime, baseTime) < 0 { return }
             
             // Проверяем что время монотонно растёт
             if CMTimeCompare(sampleTime, self.lastVideoTime) <= 0 && self.videoFrameCount > 0 {
-                return // Пропускаем дубликат/неправильный порядок
+                return
             }
             
             self.videoFrameCount += 1
             
-            // Диагностика каждую секунду (~30-60 кадров)
-            let elapsed = CMTimeSubtract(sampleTime, baseTime).seconds
-            if self.videoFrameCount % 30 == 0 {
-                let currentFPS = elapsed > 0 ? Double(self.videoFrameCount) / elapsed : 0
-            }
-            
-            // ✅ Записываем кадр с РЕАЛЬНЫМ timestamp из capture session
+            // Записываем кадр с реальным timestamp
             if adaptor.append(pixelBuffer, withPresentationTime: sampleTime) {
                 self.lastVideoTime = sampleTime
-                FPSCounter.shared.tickRecording()
+                
+                DispatchQueue.main.async {
+                    FPSCounter.shared.tickRecording()
+                }
             } else {
                 DebugLog.error("Failed to append video frame \(self.videoFrameCount), writer.status=\(writer.status.rawValue)")
             }
         }
     }
     
-    /// Записать аудио сэмпл (с ОРИГИНАЛЬНЫМ timestamp из capture session)
     func appendAudioSample(_ sampleBuffer: CMSampleBuffer) {
         guard isRecording else { return }
         
@@ -152,12 +148,7 @@ final class MediaRecorder: NSObject, ObservableObject {
             
             self.audioSampleCount += 1
             
-            // Диагностика каждую секунду (~44100 сэмплов)
-            if self.audioSampleCount % 44100 == 0 {
-                let elapsed = CMTimeSubtract(audioTime, baseTime).seconds
-            }
-            
-            // ✅ Записываем аудио с ОРИГИНАЛЬНЫМ timestamp — он из той же capture session что и видео
+            // Записываем аудио с оригинальным timestamp
             if !input.append(sampleBuffer) {
                 DebugLog.error("Failed to append audio sample \(self.audioSampleCount)")
             }
