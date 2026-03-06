@@ -1,151 +1,150 @@
 internal import AVFoundation
 
 final class CameraDeviceConfigurator {
-  func configureCamera(
-    session: AVCaptureSession,
-    currentInput: AVCaptureDeviceInput?,
-    device: AVCaptureDevice,
-    enableDepth: Bool,
-    currentPosition: AVCaptureDevice.Position,
-    videoOutput: AVCaptureVideoDataOutput,
-    formatSelector: CameraFormatSelector
-  ) throws -> AVCaptureDeviceInput {
-    if let existing = currentInput {
-      session.removeInput(existing)
+    func configureCamera(
+        session: AVCaptureSession,
+        currentInput: AVCaptureDeviceInput?,
+        device: AVCaptureDevice,
+        enableDepth: Bool,
+        currentPosition: AVCaptureDevice.Position,
+        videoOutput: AVCaptureVideoDataOutput,
+        formatSelector: CameraFormatSelector
+    ) throws -> AVCaptureDeviceInput {
+        if let existing = currentInput {
+            session.removeInput(existing)
+        }
+
+        let input = try AVCaptureDeviceInput(device: device)
+        guard session.canAddInput(input) else {
+            throw ConfigurationError.cannotAddInput
+        }
+        session.addInput(input)
+
+        let selectedFormat: AVCaptureDevice.Format?
+        if enableDepth {
+            selectedFormat = formatSelector.findBestDepthFormat(for: device)
+            if selectedFormat == nil {
+                throw ConfigurationError.noDepthCompatibleFormat
+            }
+        } else {
+            selectedFormat = formatSelector.findBestFormat(for: device)
+        }
+
+        if let format = selectedFormat {
+            try configureFormat(
+                device: device,
+                format: format,
+                targetFPS: formatSelector.chooseFrameRate(for: format)
+            )
+        }
+
+        configureVideoConnection(
+            videoOutput: videoOutput,
+            currentPosition: currentPosition
+        )
+
+        DepthManager.shared.removeDepthOutput(from: session)
+        if enableDepth {
+            DepthManager.shared.setupDepthOutput(for: session)
+            synchronizeDepthOrientation(
+                videoOutput: videoOutput,
+                depthOutput: DepthManager.shared.depthOutput,
+                currentPosition: currentPosition
+            )
+        }
+
+        return input
     }
 
-    let input = try AVCaptureDeviceInput(device: device)
-    guard session.canAddInput(input) else {
-      throw ConfigurationError.cannotAddInput
-    }
-    session.addInput(input)
+    private func configureFormat(
+        device: AVCaptureDevice,
+        format: AVCaptureDevice.Format,
+        targetFPS: Double
+    ) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
 
-    let selectedFormat: AVCaptureDevice.Format?
-    if enableDepth {
-      selectedFormat = formatSelector.findBestDepthFormat(for: device)
-      if selectedFormat == nil {
-        throw ConfigurationError.noDepthCompatibleFormat
-      }
-    } else {
-      selectedFormat = formatSelector.findBestFormat(for: device)
-    }
+        if device.activeFormat != format {
+            device.activeFormat = format
+        }
 
-    if let format = selectedFormat {
-      try configureFormat(
-        device: device,
-        format: format,
-        targetFPS: formatSelector.chooseFrameRate(for: format)
-      )
+        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+        device.activeVideoMinFrameDuration = frameDuration
+        device.activeVideoMaxFrameDuration = frameDuration
     }
 
-    configureVideoConnection(
-      videoOutput: videoOutput,
-      currentPosition: currentPosition
-    )
+    private func configureVideoConnection(
+        videoOutput: AVCaptureVideoDataOutput,
+        currentPosition: AVCaptureDevice.Position
+    ) {
+        guard let connection = videoOutput.connection(with: .video) else {
+            return
+        }
 
-    DepthManager.shared.removeDepthOutput(from: session)
-    if enableDepth {
-      DepthManager.shared.setupDepthOutput(for: session)
-      synchronizeDepthOrientation(
-        videoOutput: videoOutput,
-        depthOutput: DepthManager.shared.depthOutput,
-        currentPosition: currentPosition
-      )
+        let shouldMirror = false
+
+        if #available(iOS 17.0, *) {
+            connection.videoRotationAngle = 90
+        } else if connection.isVideoOrientationSupported {
+            connection.videoOrientation = .portrait
+        }
+
+        if connection.isVideoMirroringSupported {
+            connection.isVideoMirrored = shouldMirror
+        }
     }
 
-    return input
-  }
+    private func synchronizeDepthOrientation(
+        videoOutput: AVCaptureVideoDataOutput,
+        depthOutput: AVCaptureDepthDataOutput?,
+        currentPosition: AVCaptureDevice.Position
+    ) {
+        guard let videoConnection = videoOutput.connection(with: .video),
+              let depthOutput,
+              let depthConnection = depthOutput.connection(with: .depthData) else {
+            return
+        }
 
-  private func configureFormat(
-    device: AVCaptureDevice,
-    format: AVCaptureDevice.Format,
-    targetFPS: Double
-  ) throws {
-    try device.lockForConfiguration()
-    defer { device.unlockForConfiguration() }
+        let shouldMirror = false
 
-    if device.activeFormat != format {
-      device.activeFormat = format
+        if #available(iOS 17.0, *) {
+            if videoConnection.isVideoRotationAngleSupported(90) {
+                videoConnection.videoRotationAngle = 90
+            }
+        } else if videoConnection.isVideoOrientationSupported {
+            videoConnection.videoOrientation = .portrait
+        }
+
+        if videoConnection.isVideoMirroringSupported {
+            videoConnection.isVideoMirrored = shouldMirror
+        }
+
+        if #available(iOS 17.0, *) {
+            if depthConnection.isVideoRotationAngleSupported(90) {
+                depthConnection.videoRotationAngle = 90
+            }
+        } else if depthConnection.isVideoOrientationSupported {
+            depthConnection.videoOrientation = .portrait
+        }
+
+        if depthConnection.isVideoMirroringSupported {
+            depthConnection.isVideoMirrored = shouldMirror
+        }
     }
-
-    let frameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
-    device.activeVideoMinFrameDuration = frameDuration
-    device.activeVideoMaxFrameDuration = frameDuration
-  }
-
-  private func configureVideoConnection(
-    videoOutput: AVCaptureVideoDataOutput,
-    currentPosition: AVCaptureDevice.Position
-  ) {
-    guard let connection = videoOutput.connection(with: .video) else {
-      return
-    }
-
-    let shouldMirror = currentPosition == .front
-
-    if #available(iOS 17.0, *) {
-      connection.videoRotationAngle = 90
-    } else if connection.isVideoOrientationSupported {
-      connection.videoOrientation = .portrait
-    }
-
-    if connection.isVideoMirroringSupported {
-      connection.isVideoMirrored = shouldMirror
-    }
-  }
-
-  private func synchronizeDepthOrientation(
-    videoOutput: AVCaptureVideoDataOutput,
-    depthOutput: AVCaptureDepthDataOutput?,
-    currentPosition: AVCaptureDevice.Position
-  ) {
-    guard let videoConnection = videoOutput.connection(with: .video),
-      let depthOutput,
-      let depthConnection = depthOutput.connection(with: .depthData)
-    else {
-      return
-    }
-
-    let shouldMirror = currentPosition == .front
-
-    if #available(iOS 17.0, *) {
-      if videoConnection.isVideoRotationAngleSupported(90) {
-        videoConnection.videoRotationAngle = 90
-      }
-    } else if videoConnection.isVideoOrientationSupported {
-      videoConnection.videoOrientation = .portrait
-    }
-
-    if videoConnection.isVideoMirroringSupported {
-      videoConnection.isVideoMirrored = shouldMirror
-    }
-
-    if #available(iOS 17.0, *) {
-      if depthConnection.isVideoRotationAngleSupported(90) {
-        depthConnection.videoRotationAngle = 90
-      }
-    } else if depthConnection.isVideoOrientationSupported {
-      depthConnection.videoOrientation = .portrait
-    }
-
-    if depthConnection.isVideoMirroringSupported {
-      depthConnection.isVideoMirrored = shouldMirror
-    }
-  }
 }
 
 extension CameraDeviceConfigurator {
-  enum ConfigurationError: LocalizedError {
-    case cannotAddInput
-    case noDepthCompatibleFormat
+    enum ConfigurationError: LocalizedError {
+        case cannotAddInput
+        case noDepthCompatibleFormat
 
-    var errorDescription: String? {
-      switch self {
-      case .cannotAddInput:
-        return "Cannot add device input"
-      case .noDepthCompatibleFormat:
-        return "No depth-compatible format found"
-      }
+        var errorDescription: String? {
+            switch self {
+            case .cannotAddInput:
+                return "Cannot add device input"
+            case .noDepthCompatibleFormat:
+                return "No depth-compatible format found"
+            }
+        }
     }
-  }
 }
