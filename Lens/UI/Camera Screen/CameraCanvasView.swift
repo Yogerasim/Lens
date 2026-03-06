@@ -1,134 +1,159 @@
 import SwiftUI
 
 struct CameraCanvasView: View {
-
+    
     let renderer: MetalRenderer
-
+    
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var framePipeline = FramePipeline.shared
-    @ObservedObject var orientationManager = OrientationManager.shared  // ✅ Добавлен для iPad fix
-
+    @ObservedObject var orientationManager = OrientationManager.shared
+    
     @Binding var pinchStartZoom: CGFloat
     
     // MARK: - Intensity Gesture State
-    /// Стартовое значение intensity (фиксируется один раз при начале жеста)
     @State private var intensityGestureStartValue: Float = 1.0
-    /// Флаг что жест intensity активен
     @State private var isIntensityGestureActive: Bool = false
-    /// Видимость HUD
     @State private var isIntensityHUDVisible: Bool = false
-    /// Work item для скрытия HUD
     @State private var hideHUDWorkItem: DispatchWorkItem?
-
+    
+    // MARK: - Zoom Gesture State
+    @State private var isPinchGestureActive: Bool = false
+    
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            MetalView(renderer: renderer)
-                .aspectRatio(9.0 / 16.0, contentMode: .fit)
-                .gesture(combinedGestures)
-                .onReceive(orientationManager.$currentOrientation) { _ in
-                    // Логируем изменения размера drawable при смене ориентации
-                    let width = Int(renderer.metalLayer.drawableSize.width)
-                    let height = Int(renderer.metalLayer.drawableSize.height)
-                    print("📐 CameraCanvasView: Orientation changed, drawable=\(width)x\(height)")
-                }
+        GeometryReader { geometry in
+            let upperZoneHeight = geometry.size.height * 0.67
+            let lowerZoneHeight = geometry.size.height - upperZoneHeight
             
-            // Glass Intensity HUD (слева)
-            HStack {
-                GlassIntensityHUD(
-                    value: framePipeline.smoothedIntensity,
-                    isVisible: isIntensityHUDVisible
-                )
-                .padding(.leading, 16)
-                Spacer()
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                MetalView(renderer: renderer)
+                    .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                    .onReceive(orientationManager.$currentOrientation) { _ in
+                        let width = Int(renderer.metalLayer.drawableSize.width)
+                        let height = Int(renderer.metalLayer.drawableSize.height)
+                        print("📐 CameraCanvasView: Orientation changed, drawable=\(width)x\(height)")
+                    }
+                
+                VStack(spacing: 0) {
+                    // Верхние 2/3 — только intensity + смена эффектов
+                    Color.clear
+                        .frame(height: upperZoneHeight)
+                        .contentShape(Rectangle())
+                        .gesture(upperZoneGestures)
+                    
+                    // Нижняя 1/3 — только zoom pinch
+                    Color.clear
+                        .frame(height: lowerZoneHeight)
+                        .contentShape(Rectangle())
+                        .gesture(lowerZoomGestures)
+                }
+                
+                // Glass Intensity HUD
+                HStack {
+                    GlassIntensityHUD(
+                        value: framePipeline.smoothedIntensity,
+                        isVisible: isIntensityHUDVisible
+                    )
+                    .padding(.leading, 16)
+                    Spacer()
+                }
             }
         }
     }
-
-    // MARK: - Combined Gestures
-    private var combinedGestures: some Gesture {
+    
+    // MARK: - Lower Zoom Zone
+    private var lowerZoomGestures: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                if abs(value - 1.0) < 0.02 {
+                let normalized = max(0.5, min(4.0, value))
+                
+                if !isPinchGestureActive {
+                    isPinchGestureActive = true
                     pinchStartZoom = cameraManager.currentZoomFactor
+                    cameraManager.zoomGestureBegan()
+                    print("🤏 Lower zoom zone BEGIN start=\(String(format: "%.2f", pinchStartZoom))x")
                 }
-                let requested = pinchStartZoom * value
                 
-                // ✅ FIX: во время pinch не переключаем линзы
-                cameraManager.setZoomDuringGesture(requested)
+                let requested = pinchStartZoom * normalized
+                cameraManager.zoomGestureChanged(logicalZoom: requested)
             }
-            .onEnded { _ in
-                // ✅ FIX: завершение через setZoomDuringGesture для стабильных 60 FPS
-                cameraManager.setZoomDuringGesture(cameraManager.currentZoomFactor)
-                pinchStartZoom = cameraManager.currentZoomFactor
-            }
-            .simultaneously(with: horizontalSwipeGesture)
-            .simultaneously(with: verticalIntensityGesture)
-    }
-    
-    // MARK: - Horizontal Swipe (Effect Change)
-    private var horizontalSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 50)
             .onEnded { value in
-                let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                let normalized = max(0.5, min(4.0, value))
+                let finalLogical = pinchStartZoom * normalized
                 
-                guard isHorizontal else { return }
+                cameraManager.zoomGestureEnded(targetLogicalZoom: finalLogical)
+                pinchStartZoom = cameraManager.currentZoomFactor
+                isPinchGestureActive = false
                 
-                if value.translation.width < -50 {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        shaderManager.nextShader()
-                    }
-                } else if value.translation.width > 50 {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        shaderManager.previousShader()
-                    }
+                print("🤏 Lower zoom zone END target=\(String(format: "%.2f", finalLogical))x")
+            }
+    }
+    
+    // MARK: - Upper Zone Gestures
+    private var upperZoneGestures: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                let absX = abs(value.translation.width)
+                let absY = abs(value.translation.height)
+                
+                if absY > absX * 1.2 {
+                    handleVerticalIntensityChanged(value)
+                }
+            }
+            .onEnded { value in
+                let absX = abs(value.translation.width)
+                let absY = abs(value.translation.height)
+                
+                if absX > absY * 1.5 {
+                    handleHorizontalEffectSwipeEnded(value)
+                } else if absY > absX * 1.2 {
+                    handleVerticalIntensityEnded()
                 }
             }
     }
     
-    // MARK: - Vertical Intensity Gesture
-    private var verticalIntensityGesture: some Gesture {
-        DragGesture(minimumDistance: 15)
-            .onChanged { value in
-                let isVertical = abs(value.translation.height) > abs(value.translation.width) * 1.2
-                
-                guard isVertical else { return }
-                
-                // ✅ FIX: Фиксируем стартовое значение ОДИН РАЗ при начале жеста
-                if !isIntensityGestureActive {
-                    isIntensityGestureActive = true
-                    intensityGestureStartValue = framePipeline.smoothedIntensity
-                    print("🖐️ Intensity gesture BEGIN start=\(String(format: "%.2f", intensityGestureStartValue))")
-                }
-                
-                // Показываем HUD
-                showIntensityHUD()
-                
-                // ✅ FIX: Вычисляем новое значение относительно ФИКСИРОВАННОГО старта
-                let sensitivity: Float = 0.004
-                let deltaY = Float(value.translation.height)
-                // Свайп ВВЕРХ (deltaY < 0) увеличивает
-                // Свайп ВНИЗ (deltaY > 0) уменьшает
-                let newIntensity = intensityGestureStartValue - deltaY * sensitivity
-                
-                // Отправляем в FramePipeline (там будет smoothing)
-                framePipeline.setTargetIntensity(newIntensity, reason: "gesture")
+    // MARK: - Horizontal Effects
+    private func handleHorizontalEffectSwipeEnded(_ value: DragGesture.Value) {
+        if value.translation.width < -50 {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                shaderManager.nextShader()
             }
-            .onEnded { _ in
-                isIntensityGestureActive = false
-                print("🖐️ Intensity gesture END value=\(String(format: "%.2f", framePipeline.smoothedIntensity))")
-                
-                // Скрываем HUD через 0.8 сек
-                scheduleHideHUD(delay: 0.8)
+        } else if value.translation.width > 50 {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                shaderManager.previousShader()
             }
+        }
+    }
+    
+    // MARK: - Vertical Intensity
+    private func handleVerticalIntensityChanged(_ value: DragGesture.Value) {
+        if !isIntensityGestureActive {
+            isIntensityGestureActive = true
+            intensityGestureStartValue = framePipeline.smoothedIntensity
+            print("🖐️ Intensity gesture BEGIN start=\(String(format: "%.2f", intensityGestureStartValue))")
+        }
+        
+        showIntensityHUD()
+        
+        let sensitivity: Float = 0.004
+        let deltaY = Float(value.translation.height)
+        let newIntensity = intensityGestureStartValue - deltaY * sensitivity
+        
+        framePipeline.setTargetIntensity(newIntensity, reason: "gesture")
+    }
+    
+    private func handleVerticalIntensityEnded() {
+        guard isIntensityGestureActive else { return }
+        
+        isIntensityGestureActive = false
+        print("🖐️ Intensity gesture END value=\(String(format: "%.2f", framePipeline.smoothedIntensity))")
+        scheduleHideHUD(delay: 0.8)
     }
     
     // MARK: - HUD Visibility Control
-    
     private func showIntensityHUD() {
-        // Отменяем предыдущий hide
         hideHUDWorkItem?.cancel()
         hideHUDWorkItem = nil
         

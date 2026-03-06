@@ -1,14 +1,15 @@
 import SwiftUI
+internal import AVFoundation
 
 struct ZoomPresetRow: View {
-
+    
     @ObservedObject var cameraManager: CameraManager
-
+    
     var body: some View {
         HStack(spacing: 14) {
             ForEach(availablePresets, id: \.self) { preset in
-                let isSelected = abs(cameraManager.currentZoomFactor - preset.rawValue) < 0.02
-
+                let isSelected = isPresetSelected(preset)
+                
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         cameraManager.zoom(to: preset)
@@ -19,21 +20,46 @@ struct ZoomPresetRow: View {
                         .foregroundColor(isSelected ? .white : .white.opacity(0.75))
                         .glassChip(isSelected: isSelected)
                 }
-                .buttonStyle(.plain) // чтобы не ломать вид chip
+                .buttonStyle(.plain)
             }
         }
     }
     
-    /// Доступные зум пресеты в зависимости от состояния depth
-    private var availablePresets: [ZoomPreset] {
-        let depthMode = FramePipeline.shared.activeFilter?.needsDepth == true || cameraManager.isDepthEnabled
+    private func isPresetSelected(_ preset: ZoomPreset) -> Bool {
+        let current = cameraManager.currentZoomFactor
         
-        if depthMode {
-            // Когда depth включён или фильтр требует depth — показываем только 1x (LiDAR работает только на wide)
-            return [.wide]
-        } else {
-            // Когда depth выключен — показываем все пресеты
-            return ZoomPreset.allCases
+        switch preset {
+        case .ultraWide:
+            return abs(current - 0.5) < 0.12
+        case .wide:
+            return abs(current - 1.0) < 0.16
+        case .telephoto:
+            return abs(current - 2.0) < 0.22
         }
+    }
+    
+    /// Доступные пресеты в зависимости от фактического состояния камеры
+    private var availablePresets: [ZoomPreset] {
+        if cameraManager.isDepthEnabled {
+            return [.wide]
+        }
+        
+        if cameraManager.currentPosition == .front {
+            return [.wide]
+        }
+        
+        var result: [ZoomPreset] = []
+        
+        if cameraManager.hasUltraWideForUI {
+            result.append(.ultraWide)
+        }
+        
+        result.append(.wide)
+        
+        if cameraManager.hasTelephotoForUI {
+            result.append(.telephoto)
+        }
+        
+        return result
     }
 }

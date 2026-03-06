@@ -18,16 +18,16 @@ final class CameraManager: NSObject, ObservableObject {
     
     /// Информация для правильной ориентации
     var isFrontCamera: Bool {
-        return currentPosition == .front
+        currentPosition == .front
     }
     
     /// Поворот для портретного режима
     /// Back camera: π/2 (90°), Front camera: -π/2 (-90°)
     var rotation: Float {
         if currentPosition == .front {
-            return -Float.pi / 2.0  // -90 градусов для фронталки
+            return -Float.pi / 2.0
         } else {
-            return Float.pi / 2.0   // 90 градусов для задней
+            return Float.pi / 2.0
         }
     }
     
@@ -37,23 +37,49 @@ final class CameraManager: NSObject, ObservableObject {
     /// Статус depth (включён/выключен)
     @Published var isDepthEnabled: Bool = false
     
-    /// Минимальный зум (динамически обновляется от устройства)
+    /// Минимальный device zoom (для текущего active device)
     private var minZoomFactor: CGFloat = 1.0
     
-    /// Максимальный зум (динамически обновляется от устройства)
+    /// Максимальный device zoom (для текущего active device)
     private var maxZoomFactor: CGFloat = 10.0
     
     // MARK: - Private
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     private let outputQueue = DispatchQueue(label: "camera.output.queue")
     private let audioOutputQueue = DispatchQueue(label: "camera.audio.queue")
+    
     nonisolated(unsafe) private let videoOutput = AVCaptureVideoDataOutput()
     nonisolated(unsafe) private let audioOutput = AVCaptureAudioDataOutput()
+    
     private(set) var currentInput: AVCaptureDeviceInput?
     private var audioInput: AVCaptureDeviceInput?
     
-    // Текущий тип камеры (для back)
+    /// Текущий тип back-камеры
     private var currentBackDeviceType: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
+    
+    // MARK: - Zoom State
+    private enum LensKind: String {
+        case ultra
+        case wide
+        case tele
+        case front
+        case depth
+    }
+    
+    private struct ZoomHysteresis {
+        let wideToUltra: CGFloat = 0.90
+        let ultraToWide: CGFloat = 0.98
+        let wideToTele: CGFloat = 1.70
+        let teleToWide: CGFloat = 1.55
+    }
+    
+    private let zoomHysteresis = ZoomHysteresis()
+    private var isZoomGestureActive = false
+    private var lastRequestedLogicalZoom: CGFloat = 1.0
+    private var lastAppliedLogicalZoom: CGFloat = 1.0
+    private var lensSwitchWorkItem: DispatchWorkItem?
+    private var lastLensSwitchTime: CFAbsoluteTime = 0
+    private let minimumLensSwitchInterval: CFAbsoluteTime = 0.25
     
     // MARK: - Init
     override init() {
@@ -72,11 +98,13 @@ final class CameraManager: NSObject, ObservableObject {
             print("🔵 CameraManager: Configuring session at startup")
             print("   ℹ️ LiDAR will be enabled on demand when depth filter is selected")
             
-            // Настраиваем video и audio outputs
             self.configureOutputs()
             
-            // При старте ВСЕГДА используем обычную Wide камеру без depth
-            let desiredTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera]
+            let desiredTypes: [AVCaptureDevice.DeviceType] = [
+                .builtInWideAngleCamera,
+                .builtInUltraWideCamera,
+                .builtInTelephotoCamera
+            ]
             let discovery = AVCaptureDevice.DiscoverySession(
                 deviceTypes: desiredTypes,
                 mediaType: .video,
@@ -84,9 +112,7 @@ final class CameraManager: NSObject, ObservableObject {
             )
             
             if let videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first {
-                // Используем универсальный метод конфигурации без depth
                 self.configureCamera(device: videoDevice, enableDepth: false)
-                
                 print("🔵 CameraManager: Depth will be enabled on demand (when depth filter selected)")
             } else {
                 print("❌ No video device found")
@@ -100,31 +126,26 @@ final class CameraManager: NSObject, ObservableObject {
     private func configureOutputs() {
         configureAudioInput()
         
-        // Video output settings
-        self.videoOutput.alwaysDiscardsLateVideoFrames = true
-        // BGRA is convenient for CI/Metal path you use
-        self.videoOutput.videoSettings = [
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        videoOutput.videoSettings = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
-        self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
-        if self.session.canAddOutput(self.videoOutput) {
-            self.session.addOutput(self.videoOutput)
+        videoOutput.setSampleBufferDelegate(self, queue: outputQueue)
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
         }
         
-        // Audio output
-        self.audioOutput.setSampleBufferDelegate(self, queue: self.audioOutputQueue)
-        if self.session.canAddOutput(self.audioOutput) {
-            self.session.addOutput(self.audioOutput)
+        audioOutput.setSampleBufferDelegate(self, queue: audioOutputQueue)
+        if session.canAddOutput(audioOutput) {
+            session.addOutput(audioOutput)
         }
     }
     
-    /// Настраиваем аудио input (вызываем при старте и при получении разрешения)
+    /// Настраиваем аудио input
     private func configureAudioInput() {
         sessionQueue.async {
-            // Проверяем если аудио input уже добавлен
             if self.audioInput != nil { return }
             
-            // Добавляем аудио input если есть разрешение
             if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
                 if let mic = AVCaptureDevice.default(for: .audio) {
                     do {
@@ -147,15 +168,12 @@ final class CameraManager: NSObject, ObservableObject {
     }
     
     // MARK: - Audio Setup
-    
-    /// Попытаться добавить аудио input (вызывать при получении разрешения)
     func ensureAudioInput() {
         configureAudioInput()
     }
     
     // MARK: - Start/Stop
     func start() {
-        // Сначала проверяем/запрашиваем разрешение на камеру
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             requestAudioPermissionAndStart()
@@ -173,17 +191,14 @@ final class CameraManager: NSObject, ObservableObject {
     }
     
     private func requestAudioPermissionAndStart() {
-        // Запрашиваем разрешение на микрофон
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             startSession()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { _ in
-                // Запускаем даже если микрофон запрещён (просто без звука)
                 self.startSession()
             }
         default:
-            // Запускаем без микрофона
             startSession()
         }
     }
@@ -221,7 +236,6 @@ final class CameraManager: NSObject, ObservableObject {
                 return
             }
             
-            // Depth включен через новую архитектуру (setDepthEnabled -> configureCamera)
             print("ℹ️ CameraManager: Use setDepthEnabled method instead of enableDepth")
             print("✅ CameraManager: Depth enabled")
         }
@@ -244,13 +258,11 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Switch Camera
     func switchCamera() {
-        // ⛔️ Блокируем переключение камеры во время записи
         if FramePipeline.shared.isRecording {
             print("⛔️ CameraManager: Camera switch blocked during recording")
             return
         }
         
-        // Блокируем переключение на фронтальную камеру в depth режиме
         if isDepthEnabled && currentPosition == .back {
             print("🚫 CameraManager: Front camera blocked in depth mode")
             return
@@ -263,7 +275,6 @@ final class CameraManager: NSObject, ObservableObject {
         print("   📍 To: \(newPosition == .front ? "FRONT" : "BACK")")
         
         sessionQueue.async {
-            // Дополнительная проверка на sessionQueue
             if self.isDepthEnabled && newPosition == .front {
                 print("🚫 CameraManager: Front camera blocked in depth mode (sessionQueue)")
                 return
@@ -271,13 +282,10 @@ final class CameraManager: NSObject, ObservableObject {
             
             self.switchToDevice(type: .builtInWideAngleCamera, position: newPosition)
             
-            // ✅ FIX: При переключении на фронталку - проверяем текущий фильтр
             if newPosition == .front {
                 DispatchQueue.main.async {
-                    // Принудительно обновляем фильтр чтобы сработала валидация
                     if let currentFilter = FramePipeline.shared.activeFilter, currentFilter.needsDepth {
                         print("⛔️ CameraManager: Switching to front camera with depth filter active")
-                        // FramePipeline.activeFilter didSet сам переключит на non-depth
                         FramePipeline.shared.activeFilter = currentFilter
                     }
                 }
@@ -299,20 +307,17 @@ final class CameraManager: NSObject, ObservableObject {
             return
         }
         
-        // ✅ FIX: Обновляем @Published свойства на main thread
         DispatchQueue.main.async {
             self.currentPosition = position
         }
         
         if position == .back {
-            self.currentBackDeviceType = device.deviceType
+            currentBackDeviceType = device.deviceType
         }
         
-        // Логируем обновление rotation
         let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
         print("🧭 CameraManager: rotation updated = \(newRotation) (\(Int(newRotation * 180 / .pi))°), mirrored=\(position == .front)")
         
-        // Определяем нужен ли depth для текущего фильтра
         let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
         let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
         
@@ -322,33 +327,28 @@ final class CameraManager: NSObject, ObservableObject {
             print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
         }
         
-        // Используем универсальный метод конфигурации
         session.beginConfiguration()
-        
-        // Удаляем depth output если меняем камеру
         print("🔴 CameraManager: Removing depth output before switch")
         DepthManager.shared.removeDepthOutput(from: session)
-        
-        // Настраиваем новую камеру с правильными параметрами
         configureCamera(device: device, enableDepth: enableDepth)
-        
         session.commitConfiguration()
         
         updateZoomLimits(for: device)
-        print("✅ CameraManager: Switched to \(device.localizedName)")
         
-        // Важно: после смены линзы, deviceZoomFactor = 1.0 -> логический = base
-        DispatchQueue.main.async { self.currentZoomFactor = self.logicalFromDeviceZoom(1.0) }
+        let resetLogical = position == .front ? 1.0 : lensBaseZoom(for: device.deviceType)
+        print("✅ CameraManager: Switched to \(device.localizedName)")
+        DispatchQueue.main.async {
+            self.currentZoomFactor = resetLogical
+        }
     }
     
     private func updateZoomLimits(for device: AVCaptureDevice) {
         if #available(iOS 17.0, *) {
-            self.minZoomFactor = max(1.0, device.minAvailableVideoZoomFactor)
+            minZoomFactor = max(1.0, device.minAvailableVideoZoomFactor)
         } else {
-            self.minZoomFactor = 1.0
+            minZoomFactor = 1.0
         }
-        self.maxZoomFactor = min(10.0, device.activeFormat.videoMaxZoomFactor)
-        DispatchQueue.main.async { self.currentZoomFactor = max(self.currentZoomFactor, self.minZoomFactor) }
+        maxZoomFactor = min(10.0, device.activeFormat.videoMaxZoomFactor)
     }
     
     /// Универсальный метод конфигурации камеры (для обычного режима и depth)
@@ -357,12 +357,10 @@ final class CameraManager: NSObject, ObservableObject {
         print("   📷 Active device: \(device.deviceType.rawValue)")
         print("   📊 Depth enabled: \(enableDepth)")
         
-        // 1. Удаляем старый input
         if let existing = currentInput {
             session.removeInput(existing)
         }
         
-        // 2. Создаём и добавляем новый input
         do {
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input) else {
@@ -380,66 +378,25 @@ final class CameraManager: NSObject, ObservableObject {
             return
         }
         
-        // 3. Выбираем формат (с поддержкой depth если нужно)
-        var selectedFormat: AVCaptureDevice.Format?
+        let selectedFormat: AVCaptureDevice.Format?
         
         if enableDepth {
-            print("🔍 Looking for depth format on Wide camera...")
-            
-            // Сначала ищем depth-форматы
-            let depthFormats = device.formats.filter { !$0.supportedDepthDataFormats.isEmpty }
-            print("   Found \(depthFormats.count) formats with depth support")
-            
-            // Предпочтительные разрешения в порядке приоритета
-            let preferredWidths: [Int32] = [1920, 1280] // 1920x1080, 1280x720
-            
-            // Ищем среди предпочтительных разрешений
-            for preferredWidth in preferredWidths {
-                selectedFormat = depthFormats.first { format in
-                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    return dim.width == preferredWidth
-                }
-                if selectedFormat != nil {
-                    let dim = CMVideoFormatDescriptionGetDimensions(selectedFormat!.formatDescription)
-                    print("   📐 Selected preferred format: \(dim.width)x\(dim.height), depth formats: \(selectedFormat!.supportedDepthDataFormats.count)")
-                    break
-                }
-            }
-            
-            // Если не нашли предпочтительное - берем лучший по разрешению
-            if selectedFormat == nil && !depthFormats.isEmpty {
-                selectedFormat = depthFormats.max { format1, format2 in
-                    let dim1 = CMVideoFormatDescriptionGetDimensions(format1.formatDescription)
-                    let dim2 = CMVideoFormatDescriptionGetDimensions(format2.formatDescription)
-                    return dim1.width * dim1.height < dim2.width * dim2.height
-                }
-                
-                if let format = selectedFormat {
-                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    print("   📐 Selected best available format: \(dim.width)x\(dim.height), depth formats: \(format.supportedDepthDataFormats.count)")
-                }
-            }
-            
+            print("🔍 Looking for depth format...")
+            selectedFormat = findBestDepthFormat(for: device)
             if selectedFormat == nil {
                 print("❌ CameraManager: No depth-compatible format found")
                 return
-            } else {
-                print("✅ Selected depth format successfully")
             }
         } else {
-            // Для обычного режима используем лучший доступный формат
             selectedFormat = findBestFormat(for: device)
         }
         
-        // 4. Устанавливаем формат и FPS
         if let format = selectedFormat {
             configureFormat(device: device, format: format)
         }
         
-        // 5. Настраиваем video connection (одинаково для обычного и depth режима)
         configureVideoConnection()
         
-        // 6. Настраиваем depth если нужно
         if enableDepth {
             DepthManager.shared.setupDepthOutput(for: session)
             synchronizeDepthOrientation()
@@ -449,64 +406,125 @@ final class CameraManager: NSObject, ObservableObject {
             print("✅ CameraManager: Depth output removed")
         }
         
-        // 7. Обновляем zoom limits
         updateZoomLimits(for: device)
+        applyDeviceZoomForCurrentLogicalIfNeeded(on: device)
         
         print("✅ CameraManager: Camera configured successfully")
     }
     
-    /// Находит лучший формат для устройства (без depth)
-    private func findBestFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
-        let targetFPS = Double(DeviceCapabilities.current.maxFPS)
+    // MARK: - Format Selection
+    private func findBestDepthFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
+        let depthFormats = device.formats.filter { !$0.supportedDepthDataFormats.isEmpty }
+        guard !depthFormats.isEmpty else { return nil }
         
-        var bestFormat: AVCaptureDevice.Format?
+        let preferredWidths: [Int32] = [1920, 1280]
         
-        for format in device.formats {
-            // Проверяем поддержку целевого FPS
-            let supportsTargetFPS = format.videoSupportedFrameRateRanges.contains { range in
-                range.maxFrameRate >= targetFPS
+        for preferredWidth in preferredWidths {
+            let candidates = depthFormats.filter {
+                CMVideoFormatDescriptionGetDimensions($0.formatDescription).width == preferredWidth
             }
-            
-            if supportsTargetFPS {
-                // Предпочитаем формат с более высоким разрешением
-                if bestFormat == nil {
-                    bestFormat = format
-                } else {
-                    let currentDim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    let bestDim = CMVideoFormatDescriptionGetDimensions(bestFormat!.formatDescription)
-                    if currentDim.width * currentDim.height > bestDim.width * bestDim.height {
-                        bestFormat = format
-                    }
-                }
+            if let best = candidates.max(by: { effectiveMaxFPS(for: $0) < effectiveMaxFPS(for: $1) }) {
+                let dim = CMVideoFormatDescriptionGetDimensions(best.formatDescription)
+                print("📐 Depth format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: best)))")
+                return best
             }
         }
         
-        return bestFormat ?? device.activeFormat
+        let fallback = depthFormats.max { lhs, rhs in
+            let lhsFPS = effectiveMaxFPS(for: lhs)
+            let rhsFPS = effectiveMaxFPS(for: rhs)
+            if lhsFPS != rhsFPS { return lhsFPS < rhsFPS }
+            
+            let lhsDim = CMVideoFormatDescriptionGetDimensions(lhs.formatDescription)
+            let rhsDim = CMVideoFormatDescriptionGetDimensions(rhs.formatDescription)
+            return lhsDim.width * lhsDim.height < rhsDim.width * rhsDim.height
+        }
+        
+        if let fallback {
+            let dim = CMVideoFormatDescriptionGetDimensions(fallback.formatDescription)
+            print("📐 Depth fallback format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: fallback)))")
+        }
+        
+        return fallback
+    }
+    
+    /// Находит лучший формат для устройства (без depth)
+    private func findBestFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
+        let preferredFPS = Double(DeviceCapabilities.current.maxFPS)
+        let preferredWidths: [Int32] = [1920, 1280]
+        
+        let formats = device.formats
+        
+        for preferredWidth in preferredWidths {
+            let candidates = formats.filter {
+                CMVideoFormatDescriptionGetDimensions($0.formatDescription).width == preferredWidth &&
+                effectiveMaxFPS(for: $0) >= min(30.0, preferredFPS)
+            }
+            
+            if let best = candidates.max(by: { scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS) }) {
+                let dim = CMVideoFormatDescriptionGetDimensions(best.formatDescription)
+                print("📐 Video format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: best)))")
+                return best
+            }
+        }
+        
+        let fallback = formats.max { scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS) }
+        if let fallback {
+            let dim = CMVideoFormatDescriptionGetDimensions(fallback.formatDescription)
+            print("📐 Video fallback format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: fallback)))")
+        }
+        return fallback ?? device.activeFormat
+    }
+    
+    private func scoreForVideoFormat(_ format: AVCaptureDevice.Format, preferredFPS: Double) -> Double {
+        let maxFPS = effectiveMaxFPS(for: format)
+        let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        let pixels = Double(dim.width * dim.height)
+        
+        let fpsScore: Double
+        if maxFPS >= preferredFPS {
+            fpsScore = 10_000
+        } else if maxFPS >= 30 {
+            fpsScore = 5_000
+        } else {
+            fpsScore = maxFPS * 100
+        }
+        
+        let preferredResolutionBonus: Double
+        switch dim.width {
+        case 1920: preferredResolutionBonus = 2_000
+        case 1280: preferredResolutionBonus = 1_000
+        default: preferredResolutionBonus = 0
+        }
+        
+        return fpsScore + preferredResolutionBonus + pixels / 1_000_000
+    }
+    
+    private func effectiveMaxFPS(for format: AVCaptureDevice.Format) -> Double {
+        let formatMax = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 30
+        return min(formatMax, Double(DeviceCapabilities.current.maxFPS))
+    }
+    
+    private func chooseFrameRate(for format: AVCaptureDevice.Format) -> Double {
+        let formatMax = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 30
+        let desired = min(formatMax, Double(DeviceCapabilities.current.maxFPS))
+        
+        if desired >= 59.0 { return 60.0 }
+        if desired >= 29.0 { return 30.0 }
+        return max(1.0, floor(desired))
     }
     
     /// Конфигурирует формат и FPS для устройства
     private func configureFormat(device: AVCaptureDevice, format: AVCaptureDevice.Format) {
-        let targetFPS = Double(DeviceCapabilities.current.maxFPS)
-        
-        // Проверяем поддержку целевого FPS
-        let supportsTargetFPS = format.videoSupportedFrameRateRanges.contains { range in
-            range.maxFrameRate >= targetFPS
-        }
-        
-        guard supportsTargetFPS else {
-            print("⚠️ CameraManager: Format doesn't support \(targetFPS) FPS")
-            return
-        }
+        let targetFPS = chooseFrameRate(for: format)
         
         do {
             try device.lockForConfiguration()
             
-            // Устанавливаем формат
             if device.activeFormat != format {
                 device.activeFormat = format
             }
             
-            // Устанавливаем frame rate
             let frameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
             device.activeVideoMinFrameDuration = frameDuration
             device.activeVideoMaxFrameDuration = frameDuration
@@ -514,38 +532,29 @@ final class CameraManager: NSObject, ObservableObject {
             device.unlockForConfiguration()
             
             let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            print("📐 Active format: \(dim.width)x\(dim.height) @ \(Int(targetFPS))fps")
-            
-            // Проверяем поддержку depth
+            print("🎞️ Active format: \(dim.width)x\(dim.height) @ \(Int(targetFPS))fps")
             let depthSupported = !format.supportedDepthDataFormats.isEmpty
             print("📊 Format supports depth: \(depthSupported ? "YES" : "NO")")
-            
         } catch {
             print("❌ CameraManager: Failed to configure format: \(error)")
         }
     }
     
-    /// Конфигурирует video connection (одинаково для всех режимов)
+    /// Конфигурирует video connection
     private func configureVideoConnection() {
         guard let connection = videoOutput.connection(with: .video) else {
             print("⚠️ CameraManager: No video connection found")
             return
         }
         
-        // ✅ FIX: Зеркалирование ТОЛЬКО через AVCaptureConnection (единый источник)
-        // Front camera -> зеркалим, Back camera -> не зеркалим
         let shouldMirror = currentPosition == .front
         
         if #available(iOS 17.0, *) {
-            // На iOS 17+ используем videoRotationAngle
-            connection.videoRotationAngle = 90 // Portrait orientation
-        } else {
-            if connection.isVideoOrientationSupported {
-                connection.videoOrientation = .portrait
-            }
+            connection.videoRotationAngle = 90
+        } else if connection.isVideoOrientationSupported {
+            connection.videoOrientation = .portrait
         }
         
-        // ✅ FIX: Mirroring только здесь, не в шейдере
         if connection.isVideoMirroringSupported {
             connection.isVideoMirrored = shouldMirror
         }
@@ -565,45 +574,66 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
         from connection: AVCaptureConnection
     ) {
         if output == videoOutput {
-            // Video
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
             let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let callback = onFrame
             callback?(pixelBuffer, time)
         } else if output == audioOutput {
-            // Audio
             let callback = onAudioSample
             callback?(sampleBuffer)
         }
     }
 }
 
-// MARK: - Zoom Control (stable)
+// MARK: - Zoom Control (iPhone Camera Style)
 extension CameraManager {
     
-    // Базовый "логический" коэффициент для текущей линзы.
-    // Wide = 1.0, UltraWide = 0.5, Tele = 2.0
-    private var lensBaseZoom: CGFloat {
-        if currentPosition == .front { return 1.0 }
-        if isDepthEnabled { return 1.0 }
+    // MARK: - Public Properties for UI
+    var hasUltraWideForUI: Bool { hasUltraWide && !isDepthEnabled && currentPosition == .back }
+    var hasTelephotoForUI: Bool { hasTelephoto && !isDepthEnabled && currentPosition == .back }
+    var maxDigitalZoomForUI: CGFloat { 9.0 }
+    
+    // MARK: - Private Helpers
+    private var currentLensType: LensKind {
+        if currentPosition == .front { return .front }
+        if isDepthEnabled { return .depth }
         
         switch currentBackDeviceType {
+        case .builtInUltraWideCamera: return .ultra
+        case .builtInTelephotoCamera: return .tele
+        default: return .wide
+        }
+    }
+    
+    private var lensBaseZoom: CGFloat {
+        lensBaseZoom(for: currentBackDeviceType)
+    }
+    
+    private func lensBaseZoom(for deviceType: AVCaptureDevice.DeviceType) -> CGFloat {
+        switch deviceType {
         case .builtInUltraWideCamera: return 0.5
         case .builtInTelephotoCamera: return 2.0
         default: return 1.0
         }
     }
     
-    private func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
-        min(max(v, lo), hi)
+    private var minimumLogicalZoom: CGFloat {
+        if currentPosition == .front { return 1.0 }
+        if isDepthEnabled { return 1.0 }
+        return hasUltraWide ? 0.5 : 1.0
     }
     
-    private func logicalFromDeviceZoom(_ deviceZoom: CGFloat) -> CGFloat {
-        lensBaseZoom * deviceZoom
+    private var maximumLogicalZoom: CGFloat {
+        if currentPosition == .front || isDepthEnabled {
+            return maxDigitalZoomForUI
+        }
+        
+        let base = max(lensBaseZoom, hasTelephoto ? 2.0 : 1.0)
+        return max(maxDigitalZoomForUI, base * maxZoomFactor)
     }
     
-    private func deviceZoomFromLogical(_ logicalZoom: CGFloat) -> CGFloat {
-        logicalZoom / max(lensBaseZoom, 0.0001)
+    private func clamp(_ value: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(value, lo), hi)
     }
     
     private func hasDevice(_ type: AVCaptureDevice.DeviceType) -> Bool {
@@ -618,95 +648,294 @@ extension CameraManager {
     private var hasUltraWide: Bool { hasDevice(.builtInUltraWideCamera) }
     private var hasTelephoto: Bool { hasDevice(.builtInTelephotoCamera) }
     
-    // Устанавливаем device.videoZoomFactor (это ВНУТРИ-линзовый зум),
-    // а currentZoomFactor обновляем как логический (base * deviceZoom).
-    private func setDeviceZoom(_ deviceZoom: CGFloat) {
-        guard let device = self.currentInput?.device else { return }
-        let hwMax = min(self.maxZoomFactor, device.activeFormat.videoMaxZoomFactor)
-        let clamped = max(self.minZoomFactor, min(deviceZoom, hwMax))
+    private func backDevice(for lens: LensKind) -> AVCaptureDevice? {
+        let type: AVCaptureDevice.DeviceType
+        
+        switch lens {
+        case .ultra:
+            type = .builtInUltraWideCamera
+        case .tele:
+            type = .builtInTelephotoCamera
+        case .wide, .depth, .front:
+            type = .builtInWideAngleCamera
+        }
+        
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [type, .builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera],
+            mediaType: .video,
+            position: .back
+        )
+        return discovery.devices.first(where: { $0.deviceType == type }) ?? discovery.devices.first
+    }
+    
+    /// Безопасно ставит device.videoZoomFactor (вызывать на sessionQueue)
+    private func setDeviceZoomSafe(_ deviceZoom: CGFloat, on device: AVCaptureDevice? = nil) {
+        guard let targetDevice = device ?? currentInput?.device else { return }
+        let hwMax = targetDevice.activeFormat.videoMaxZoomFactor
+        let clamped = max(1.0, min(deviceZoom, hwMax))
         
         do {
-            try device.lockForConfiguration()
-            device.videoZoomFactor = clamped
-            device.unlockForConfiguration()
-            let logical = self.logicalFromDeviceZoom(clamped)
-            DispatchQueue.main.async { self.currentZoomFactor = logical }
+            try targetDevice.lockForConfiguration()
+            targetDevice.videoZoomFactor = clamped
+            targetDevice.unlockForConfiguration()
         } catch {
-            print("❌ Failed to set zoom: \(error)")
+            print("❌ Zoom error: \(error)")
         }
     }
     
-    /// Старый API оставляем (чтобы ничего не сломать),
-    /// но теперь это "цифровой зум на текущей линзе" (без переключения линз).
-    func setZoom(_ factor: CGFloat) {
-        sessionQueue.async {
-            // factor здесь трактуем как deviceZoomFactor (как было раньше)
-            self.setDeviceZoom(factor)
+    private func updateLogicalZoom(_ logical: CGFloat) {
+        DispatchQueue.main.async {
+            self.currentZoomFactor = logical
         }
     }
     
-    /// ✅ Во время gesture (pinch/rotation): ТОЛЬКО digital на текущей линзе.
-    /// НИКАКИХ switchToDevice / configureCamera.
-    /// ✅ FIX: Digital zoom во время жеста БЕЗ переключения устройств для стабильных 60 FPS
-    func setZoomDuringGesture(_ requestedLogical: CGFloat) {
-        sessionQueue.async {
-            guard let device = self.currentInput?.device else { return }
-            let hwMax = min(self.maxZoomFactor, device.activeFormat.videoMaxZoomFactor)
-            
-            // Определяем диапазон zoom для current устройства
-            let minZoom: CGFloat
-            let maxZoom: CGFloat
-            
-            if self.currentPosition == .front || self.isDepthEnabled {
-                // Front camera и depth режим: 1.0 - hwMax
-                minZoom = 1.0
-                maxZoom = hwMax
-            } else {
-                // Back camera: используем широкий диапазон без переключения устройств
-                // Современные wide камеры поддерживают 0.5x-3.0x digital zoom
-                minZoom = 0.5  // Эмуляция ultrawide
-                maxZoom = min(3.0, hwMax)  // До 3x или max устройства
+    private func applyDeviceZoomForCurrentLogicalIfNeeded(on device: AVCaptureDevice) {
+        let base: CGFloat
+        if currentPosition == .front || isDepthEnabled {
+            base = 1.0
+        } else {
+            base = lensBaseZoom(for: device.deviceType)
+        }
+        
+        let logical = clamp(lastAppliedLogicalZoom, minimumLogicalZoom, maximumLogicalZoom)
+        let desiredDeviceZoom = clamp(logical / base, 1.0, device.activeFormat.videoMaxZoomFactor)
+        setDeviceZoomSafe(desiredDeviceZoom, on: device)
+    }
+    
+    private func desiredLensForEndedGesture(targetLogicalZoom logical: CGFloat) -> LensKind {
+        let current = currentLensType
+        
+        guard currentPosition == .back, !isDepthEnabled else { return current }
+        guard !FramePipeline.shared.isRecording else { return current }
+        
+        switch current {
+        case .ultra:
+            if logical > zoomHysteresis.ultraToWide {
+                return .wide
             }
+            return .ultra
             
-            let logical = self.clamp(requestedLogical, minZoom, maxZoom)
-            self.setDeviceZoom(logical)  // Прямой digital zoom без switchToDevice
-            
-            // ✅ FIX: Логирование для подтверждения отсутствия переключения устройств
-            if logical != requestedLogical {
-                print("🔍 Zoom clamped: \(String(format: "%.1f", requestedLogical)) → \(String(format: "%.1f", logical)) (digital only, no device switch)")
+        case .wide:
+            if hasUltraWide && logical < zoomHysteresis.wideToUltra {
+                print("🧲 Hysteresis: wide -> ultra, logical=\(String(format: "%.2f", logical)) < \(zoomHysteresis.wideToUltra)")
+                return .ultra
             }
+            if hasTelephoto && logical > zoomHysteresis.wideToTele {
+                print("🧲 Hysteresis: wide -> tele, logical=\(String(format: "%.2f", logical)) > \(zoomHysteresis.wideToTele)")
+                return .tele
+            }
+            return .wide
+            
+        case .tele:
+            if logical < zoomHysteresis.teleToWide {
+                print("🧲 Hysteresis: tele -> wide, logical=\(String(format: "%.2f", logical)) < \(zoomHysteresis.teleToWide)")
+                return .wide
+            }
+            return .tele
+            
+        case .front, .depth:
+            return current
         }
     }
     
-    /// ✅ FIX: Убираем переключение физических устройств для устранения FPS дропа
-    /// Используем только digital zoom для поддержания стабильных 60 FPS
-    func finalizeZoomAfterGesture(_ targetLogical: CGFloat) {
-        print("🔍 Zoom finalized: \(String(format: "%.1f", targetLogical)) (digital zoom for stable 60 FPS)")
-        setZoomDuringGesture(targetLogical)
-    }
-    
-    /// Preset = это намеренный выбор линзы, значит делаем finalize.
-    func zoom(to preset: ZoomPreset) {
-        // Блокируем зум если depth включён и пытаемся переключиться не на 1x
-        if isDepthEnabled && preset != .wide {
-            print("🚫 Zoom preset blocked because depth is enabled - only 1x allowed")
+    private func switchBackLens(to newLens: LensKind, targetLogicalZoom logical: CGFloat, reason: String) {
+        guard currentPosition == .back else { return }
+        guard !isDepthEnabled else { return }
+        guard !FramePipeline.shared.isRecording else {
+            print("⛔️ Lens switch blocked during recording")
             return
         }
-        finalizeZoomAfterGesture(preset.rawValue)
+        
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastLensSwitchTime >= minimumLensSwitchInterval else {
+            print("⏱️ Lens switch skipped by cooldown")
+            applyDigitalZoomOnly(logical: logical, publishLogical: true)
+            return
+        }
+        
+        guard newLens != currentLensType else {
+            applyDigitalZoomOnly(logical: logical, publishLogical: true)
+            return
+        }
+        
+        guard let targetDevice = backDevice(for: newLens) else {
+            print("❌ No target back device for lens \(newLens.rawValue)")
+            applyDigitalZoomOnly(logical: logical, publishLogical: true)
+            return
+        }
+        
+        lastLensSwitchTime = now
+        let targetBase = lensBaseZoom(for: targetDevice.deviceType)
+        
+        print("🔁 Lens switch: \(currentLensType.rawValue) -> \(newLens.rawValue) [\(reason)]")
+        print("   requested logical: \(String(format: "%.2f", logical))x")
+        
+        session.beginConfiguration()
+        DepthManager.shared.removeDepthOutput(from: session)
+        configureCamera(device: targetDevice, enableDepth: false)
+        session.commitConfiguration()
+        
+        let deviceZoom = clamp(logical / targetBase, 1.0, targetDevice.activeFormat.videoMaxZoomFactor)
+        setDeviceZoomSafe(deviceZoom, on: targetDevice)
+        
+        let appliedLogical = targetBase * deviceZoom
+        lastAppliedLogicalZoom = appliedLogical
+        lastRequestedLogicalZoom = appliedLogical
+        
+        print("✅ Lens switched -> \(newLens.rawValue), deviceZoom=\(String(format: "%.2f", deviceZoom)), appliedLogical=\(String(format: "%.2f", appliedLogical))x")
+        updateLogicalZoom(appliedLogical)
     }
     
-    // MARK: - Depth Management (как было)
-    /// Централизованный метод управления depth политикой
+    private func applyDigitalZoomOnly(logical: CGFloat, publishLogical: Bool) {
+        guard let device = currentInput?.device else { return }
+        
+        let requestedLogical = clamp(logical, minimumLogicalZoom, max(maxDigitalZoomForUI, maximumLogicalZoom))
+        let base: CGFloat
+        
+        if currentPosition == .front || isDepthEnabled {
+            base = 1.0
+        } else {
+            base = lensBaseZoom
+        }
+        
+        let deviceZoom = clamp(requestedLogical / base, 1.0, device.activeFormat.videoMaxZoomFactor)
+        setDeviceZoomSafe(deviceZoom, on: device)
+        
+        let publishedLogical = publishLogical ? requestedLogical : (base * deviceZoom)
+        lastAppliedLogicalZoom = publishedLogical
+        lastRequestedLogicalZoom = requestedLogical
+        
+        print("🔍 Zoom apply: requestedLogical=\(String(format: "%.2f", requestedLogical))x, deviceZoom=\(String(format: "%.2f", deviceZoom)), lens=\(currentLensType.rawValue)")
+        updateLogicalZoom(publishedLogical)
+    }
+    
+    // MARK: - Public Zoom API
+    func zoomGestureBegan() {
+        sessionQueue.async {
+            self.isZoomGestureActive = true
+            self.lensSwitchWorkItem?.cancel()
+            self.lensSwitchWorkItem = nil
+            self.lastRequestedLogicalZoom = self.currentZoomFactor
+            print("🤏 Zoom gesture began, logical=\(String(format: "%.2f", self.lastRequestedLogicalZoom))x")
+        }
+    }
+    
+    func zoomGestureChanged(logicalZoom: CGFloat) {
+        guard logicalZoom.isFinite, logicalZoom > 0 else { return }
+        
+        sessionQueue.async {
+            let clampedLogical = self.clamp(logicalZoom, self.minimumLogicalZoom, self.maxDigitalZoomForUI)
+            
+            // Depth / front / recording: всегда только digital
+            if self.isDepthEnabled || self.currentPosition == .front || FramePipeline.shared.isRecording {
+                self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
+                return
+            }
+            
+            // During gesture: only digital in current lens, no physical lens switch.
+            self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
+        }
+    }
+    
+    func zoomGestureEnded(targetLogicalZoom: CGFloat) {
+        guard targetLogicalZoom.isFinite, targetLogicalZoom > 0 else { return }
+        
+        sessionQueue.async {
+            let clampedLogical = self.clamp(targetLogicalZoom, self.minimumLogicalZoom, self.maxDigitalZoomForUI)
+            self.isZoomGestureActive = false
+            self.lastRequestedLogicalZoom = clampedLogical
+            
+            if self.isDepthEnabled || self.currentPosition == .front || FramePipeline.shared.isRecording {
+                self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
+                print("🏁 Zoom gesture ended (digital-only), logical=\(String(format: "%.2f", clampedLogical))x")
+                return
+            }
+            
+            let desiredLens = self.desiredLensForEndedGesture(targetLogicalZoom: clampedLogical)
+            let currentLens = self.currentLensType
+            
+            if desiredLens != currentLens {
+                self.switchBackLens(to: desiredLens, targetLogicalZoom: clampedLogical, reason: "gestureEnded")
+            } else {
+                self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
+                print("🏁 Zoom gesture ended, staying on lens=\(currentLens.rawValue), logical=\(String(format: "%.2f", clampedLogical))x")
+            }
+        }
+    }
+    
+    func jumpToPreset(logical: CGFloat) {
+        guard logical.isFinite, logical > 0 else { return }
+        
+        sessionQueue.async {
+            let targetLogical = self.clamp(logical, self.minimumLogicalZoom, self.maxDigitalZoomForUI)
+            
+            if self.isDepthEnabled {
+                let depthLogical = max(1.0, targetLogical)
+                print("🎯 Preset jump (depth): \(String(format: "%.2f", depthLogical))x")
+                self.applyDigitalZoomOnly(logical: depthLogical, publishLogical: true)
+                return
+            }
+            
+            if self.currentPosition == .front {
+                let frontLogical = max(1.0, targetLogical)
+                print("🎯 Preset jump (front): \(String(format: "%.2f", frontLogical))x")
+                self.applyDigitalZoomOnly(logical: frontLogical, publishLogical: true)
+                return
+            }
+            
+            let desiredLens: LensKind
+            if targetLogical <= 0.75, self.hasUltraWide {
+                desiredLens = .ultra
+            } else if targetLogical >= 2.0, self.hasTelephoto {
+                desiredLens = .tele
+            } else {
+                desiredLens = .wide
+            }
+            
+            if desiredLens != self.currentLensType {
+                self.switchBackLens(to: desiredLens, targetLogicalZoom: targetLogical, reason: "presetTap")
+            } else {
+                self.applyDigitalZoomOnly(logical: targetLogical, publishLogical: true)
+                print("🎯 Preset jump on same lens: \(String(format: "%.2f", targetLogical))x")
+            }
+        }
+    }
+    
+    // MARK: - Compat API
+    func smoothZoom(to logical: CGFloat) {
+        zoomGestureChanged(logicalZoom: logical)
+    }
+    
+    func setZoomDuringGesture(_ requestedLogical: CGFloat) {
+        zoomGestureChanged(logicalZoom: requestedLogical)
+    }
+    
+    func finalizeZoomAfterGesture(_ targetLogical: CGFloat) {
+        zoomGestureEnded(targetLogicalZoom: targetLogical)
+    }
+    
+    func setZoom(_ factor: CGFloat) {
+        jumpToPreset(logical: factor)
+    }
+    
+    /// Preset кнопки
+    func zoom(to preset: ZoomPreset) {
+        if isDepthEnabled && preset != .wide {
+            print("🚫 Zoom preset blocked in depth mode")
+            return
+        }
+        jumpToPreset(logical: preset.rawValue)
+    }
+    
+    // MARK: - Depth Management
     func applyDepthPolicy(needsDepth: Bool, reason: String) {
         print("🎯 CameraManager: applyDepthPolicy(needsDepth: \(needsDepth)) - \(reason)")
         
-        // ⛔️ Блокируем изменение depth policy во время записи
         if FramePipeline.shared.isRecording {
             print("⛔️ CameraManager: Depth policy change blocked during recording")
             return
         }
         
-        // Depth работает только на back camera
         let canUseDepth = currentPosition == .back
         
         if needsDepth && canUseDepth {
@@ -721,24 +950,21 @@ extension CameraManager {
         }
     }
     
-    /// Включает/выключает depth динамически в зависимости от выбранного фильтра
     private func setDepthEnabled(_ enabled: Bool, reason: String) {
         print("🔵 CameraManager: setDepthEnabled(\(enabled)) - \(reason)")
         
-        // ✅ FIX: Блокируем depth на фронтальной камере
         if enabled && currentPosition == .front {
             print("⛔️ CameraManager: Depth requested on front camera, ignoring")
             return
         }
         
-        // Идемпотентность — если состояние не изменилось, ничего не делаем
         guard enabled != isDepthEnabled else {
             print("   ↪️ Depth already \(enabled ? "enabled" : "disabled"), skipping")
             return
         }
         
         sessionQueue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             
             self.session.beginConfiguration()
             defer { self.session.commitConfiguration() }
@@ -746,7 +972,6 @@ extension CameraManager {
             if enabled {
                 print("🟢 CameraManager: ENABLING depth - looking for LiDAR camera")
                 
-                // На iPhone 14 Pro используем builtInLiDARDepthCamera
                 let lidarDiscovery = AVCaptureDevice.DiscoverySession(
                     deviceTypes: [.builtInLiDARDepthCamera],
                     mediaType: .video,
@@ -755,15 +980,16 @@ extension CameraManager {
                 
                 if let lidarDevice = lidarDiscovery.devices.first {
                     print("✅ CameraManager: Found LiDAR camera - \(lidarDevice.localizedName)")
+                    self.lastAppliedLogicalZoom = 1.0
+                    self.lastRequestedLogicalZoom = 1.0
                     self.configureCamera(device: lidarDevice, enableDepth: true)
                     
-                    // Обновляем флаг на main thread
                     DispatchQueue.main.async {
                         self.isDepthEnabled = true
+                        self.currentZoomFactor = 1.0
                         print("📱 CameraManager: UI updated - isDepthEnabled = true")
                     }
                 } else {
-                    // Fallback: пробуем найти Wide камеру с depth support
                     print("⚠️ CameraManager: No LiDAR camera, trying Wide camera with depth formats")
                     
                     let wideDiscovery = AVCaptureDevice.DiscoverySession(
@@ -776,10 +1002,13 @@ extension CameraManager {
                         let hasDepthFormats = wideDevice.formats.contains { !$0.supportedDepthDataFormats.isEmpty }
                         if hasDepthFormats {
                             print("✅ CameraManager: Wide camera has depth formats")
+                            self.lastAppliedLogicalZoom = 1.0
+                            self.lastRequestedLogicalZoom = 1.0
                             self.configureCamera(device: wideDevice, enableDepth: true)
                             
                             DispatchQueue.main.async {
                                 self.isDepthEnabled = true
+                                self.currentZoomFactor = 1.0
                                 print("📱 CameraManager: UI updated - isDepthEnabled = true")
                             }
                         } else {
@@ -790,7 +1019,6 @@ extension CameraManager {
             } else {
                 print("⚪️ CameraManager: DISABLING depth - switching to Wide camera")
                 
-                // Находим Wide камеру для отключения depth
                 let wideDiscovery = AVCaptureDevice.DiscoverySession(
                     deviceTypes: [.builtInWideAngleCamera],
                     mediaType: .video,
@@ -798,13 +1026,15 @@ extension CameraManager {
                 )
                 
                 if let wideDevice = wideDiscovery.devices.first {
+                    self.lastAppliedLogicalZoom = 1.0
+                    self.lastRequestedLogicalZoom = 1.0
                     self.configureCamera(device: wideDevice, enableDepth: false)
                     print("✅ CameraManager: Depth DISABLED")
                 }
                 
-                // Обновляем флаг на main thread
                 DispatchQueue.main.async {
                     self.isDepthEnabled = false
+                    self.currentZoomFactor = 1.0
                     print("📱 CameraManager: UI updated - isDepthEnabled = false")
                 }
             }
@@ -822,30 +1052,26 @@ extension CameraManager {
         
         let shouldMirror = currentPosition == .front
         
-        // Video connection
         if #available(iOS 17.0, *) {
             if videoConnection.isVideoRotationAngleSupported(90) {
-                videoConnection.videoRotationAngle = 90 // Portrait
+                videoConnection.videoRotationAngle = 90
             }
-        } else {
-            if videoConnection.isVideoOrientationSupported {
-                videoConnection.videoOrientation = .portrait
-            }
+        } else if videoConnection.isVideoOrientationSupported {
+            videoConnection.videoOrientation = .portrait
         }
+        
         if videoConnection.isVideoMirroringSupported {
             videoConnection.isVideoMirrored = shouldMirror
         }
         
-        // Depth connection
         if #available(iOS 17.0, *) {
             if depthConnection.isVideoRotationAngleSupported(90) {
-                depthConnection.videoRotationAngle = 90 // Portrait
+                depthConnection.videoRotationAngle = 90
             }
-        } else {
-            if depthConnection.isVideoOrientationSupported {
-                depthConnection.videoOrientation = .portrait
-            }
+        } else if depthConnection.isVideoOrientationSupported {
+            depthConnection.videoOrientation = .portrait
         }
+        
         if depthConnection.isVideoMirroringSupported {
             depthConnection.isVideoMirrored = shouldMirror
         }
@@ -868,37 +1094,5 @@ enum ZoomPreset: CGFloat, CaseIterable {
         case .wide: return "1×"
         case .telephoto: return "2×"
         }
-    }
-}
-
-// MARK: - UI helpers (оставил как у тебя)
-extension CameraManager {
-    var hasUltraWideForUI: Bool {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInUltraWideCamera],
-            mediaType: .video,
-            position: .back
-        )
-        return !discovery.devices.isEmpty
-    }
-
-    var maxDigitalZoomForUI: CGFloat {
-        // логический максимум: base(2x если tele) * hwMax
-        guard let device = currentInput?.device else { return 10.0 }
-        let hwMax = min(maxZoomFactor, device.activeFormat.videoMaxZoomFactor)
-
-        if currentPosition == .back, !isDepthEnabled, hasTelephotoForUI {
-            return 2.0 * hwMax
-        }
-        return hwMax
-    }
-
-    var hasTelephotoForUI: Bool {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInTelephotoCamera],
-            mediaType: .video,
-            position: .back
-        )
-        return !discovery.devices.isEmpty
     }
 }

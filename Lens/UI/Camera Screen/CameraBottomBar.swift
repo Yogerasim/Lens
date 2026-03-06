@@ -6,12 +6,47 @@ struct CameraBottomBar: View {
     @ObservedObject var shaderManager: ShaderManager
     @ObservedObject var mediaRecorder: MediaRecorder
     @State private var isFlashing: Bool = false
+    @State private var isZoomSliderVisible: Bool = false
+    
+    private var isLiDARMode: Bool {
+        FramePipeline.shared.activeFilter?.needsDepth == true || cameraManager.isDepthEnabled
+    }
 
     var body: some View {
         VStack(spacing: 16) {
             ShaderIndicatorRow(shaderManager: shaderManager)
 
-            ZoomPresetRow(cameraManager: cameraManager)
+            // Zoom: preset row или slider
+            if isZoomSliderVisible {
+                ZoomSlider(
+                    cameraManager: cameraManager,
+                    isVisible: $isZoomSliderVisible,
+                    isLiDARMode: isLiDARMode
+                )
+                .padding(.horizontal, 20)
+                .frame(height: 44)
+                .transition(.opacity)
+            } else {
+                // Preset кнопки + тап по текущему zoom для открытия slider
+                HStack(spacing: 14) {
+                    ZoomPresetRow(cameraManager: cameraManager)
+                    
+                    // Кнопка-toggle для zoom slider
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            isZoomSliderVisible = true
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(height: 44)
+                .transition(.opacity)
+            }
 
             CaptureModeSelector(mediaRecorder: mediaRecorder)
 
