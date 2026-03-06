@@ -57,6 +57,19 @@ final class CameraManager: NSObject, ObservableObject {
     /// Текущий тип back-камеры
     private var currentBackDeviceType: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
     
+    // MARK: - Camera Capabilities
+    private var backCapabilities: CameraCapabilities {
+        CameraCapabilities.make(position: .back)
+    }
+    
+    private var frontCapabilities: CameraCapabilities {
+        CameraCapabilities.make(position: .front)
+    }
+    
+    private var currentCapabilities: CameraCapabilities {
+        currentPosition == .front ? frontCapabilities : backCapabilities
+    }
+    
     // MARK: - Zoom State
     private enum LensKind: String {
         case ultra
@@ -95,21 +108,9 @@ final class CameraManager: NSObject, ObservableObject {
             // Используем inputPriority чтобы вручную выбирать формат с depth
             self.session.sessionPreset = .inputPriority
             
-            
             self.configureOutputs()
             
-            let desiredTypes: [AVCaptureDevice.DeviceType] = [
-                .builtInWideAngleCamera,
-                .builtInUltraWideCamera,
-                .builtInTelephotoCamera
-            ]
-            let discovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: desiredTypes,
-                mediaType: .video,
-                position: self.currentPosition
-            )
-            
-            if let videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first {
+            if let videoDevice = self.backCapabilities.wideDevice ?? self.backCapabilities.devices.first {
                 self.configureCamera(device: videoDevice, enableDepth: false)
             } else {
                 DebugLog.error("No video device found")
@@ -229,7 +230,6 @@ final class CameraManager: NSObject, ObservableObject {
                 DebugLog.warning("CameraManager: Depth only available on back camera")
                 return
             }
-            
         }
     }
     
@@ -242,7 +242,6 @@ final class CameraManager: NSObject, ObservableObject {
             self.session.beginConfiguration()
             DepthManager.shared.removeDepthOutput(from: self.session)
             self.session.commitConfiguration()
-            
         }
     }
     
@@ -259,7 +258,6 @@ final class CameraManager: NSObject, ObservableObject {
         }
         
         let newPosition: AVCaptureDevice.Position = currentPosition == .back ? .front : .back
-        
         
         sessionQueue.async {
             if self.isDepthEnabled && newPosition == .front {
@@ -282,13 +280,9 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Internal helpers
     private func switchToDevice(type: AVCaptureDevice.DeviceType, position: AVCaptureDevice.Position) {
+        let capabilities = CameraCapabilities.make(position: position)
         
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInUltraWideCamera, .builtInWideAngleCamera, .builtInTelephotoCamera],
-            mediaType: .video,
-            position: position
-        )
-        guard let device = discovery.devices.first(where: { $0.deviceType == type }) ?? discovery.devices.first else {
+        guard let device = capabilities.device(for: type) ?? capabilities.devices.first else {
             DebugLog.error("CameraManager: No device for type: \(type) position: \(position)")
             return
         }
@@ -301,14 +295,8 @@ final class CameraManager: NSObject, ObservableObject {
             currentBackDeviceType = device.deviceType
         }
         
-        let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
-        
         let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
         let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
-        
-        if enableDepth {
-        } else {
-        }
         
         session.beginConfiguration()
         DepthManager.shared.removeDepthOutput(from: session)
@@ -334,7 +322,6 @@ final class CameraManager: NSObject, ObservableObject {
     
     /// Универсальный метод конфигурации камеры (для обычного режима и depth)
     private func configureCamera(device: AVCaptureDevice, enableDepth: Bool) {
-        
         if let existing = currentInput {
             session.removeInput(existing)
         }
@@ -383,7 +370,6 @@ final class CameraManager: NSObject, ObservableObject {
         
         updateZoomLimits(for: device)
         applyDeviceZoomForCurrentLogicalIfNeeded(on: device)
-        
     }
     
     // MARK: - Format Selection
@@ -398,7 +384,6 @@ final class CameraManager: NSObject, ObservableObject {
                 CMVideoFormatDescriptionGetDimensions($0.formatDescription).width == preferredWidth
             }
             if let best = candidates.max(by: { effectiveMaxFPS(for: $0) < effectiveMaxFPS(for: $1) }) {
-                let dim = CMVideoFormatDescriptionGetDimensions(best.formatDescription)
                 return best
             }
         }
@@ -411,10 +396,6 @@ final class CameraManager: NSObject, ObservableObject {
             let lhsDim = CMVideoFormatDescriptionGetDimensions(lhs.formatDescription)
             let rhsDim = CMVideoFormatDescriptionGetDimensions(rhs.formatDescription)
             return lhsDim.width * lhsDim.height < rhsDim.width * rhsDim.height
-        }
-        
-        if let fallback {
-            let dim = CMVideoFormatDescriptionGetDimensions(fallback.formatDescription)
         }
         
         return fallback
@@ -434,15 +415,14 @@ final class CameraManager: NSObject, ObservableObject {
             }
             
             if let best = candidates.max(by: { scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS) }) {
-                let dim = CMVideoFormatDescriptionGetDimensions(best.formatDescription)
                 return best
             }
         }
         
-        let fallback = formats.max { scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS) }
-        if let fallback {
-            let dim = CMVideoFormatDescriptionGetDimensions(fallback.formatDescription)
+        let fallback = formats.max {
+            scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS)
         }
+        
         return fallback ?? device.activeFormat
     }
     
@@ -500,9 +480,6 @@ final class CameraManager: NSObject, ObservableObject {
             device.activeVideoMaxFrameDuration = frameDuration
             
             device.unlockForConfiguration()
-            
-            let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let depthSupported = !format.supportedDepthDataFormats.isEmpty
         } catch {
             DebugLog.error("CameraManager: Failed to configure format: \(error)")
         }
@@ -526,7 +503,6 @@ final class CameraManager: NSObject, ObservableObject {
         if connection.isVideoMirroringSupported {
             connection.isVideoMirrored = shouldMirror
         }
-        
     }
 }
 
@@ -553,9 +529,17 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
 extension CameraManager {
     
     // MARK: - Public Properties for UI
-    var hasUltraWideForUI: Bool { hasUltraWide && !isDepthEnabled && currentPosition == .back }
-    var hasTelephotoForUI: Bool { hasTelephoto && !isDepthEnabled && currentPosition == .back }
-    var maxDigitalZoomForUI: CGFloat { 9.0 }
+    var hasUltraWideForUI: Bool {
+        currentPosition == .back && !isDepthEnabled && backCapabilities.hasUltraWide
+    }
+    
+    var hasTelephotoForUI: Bool {
+        currentPosition == .back && !isDepthEnabled && backCapabilities.hasTelephoto
+    }
+    
+    var maxDigitalZoomForUI: CGFloat {
+        currentCapabilities.maxLogicalZoom
+    }
     
     // MARK: - Private Helpers
     private var currentLensType: LensKind {
@@ -582,54 +566,35 @@ extension CameraManager {
     }
     
     private var minimumLogicalZoom: CGFloat {
-        if currentPosition == .front { return 1.0 }
-        if isDepthEnabled { return 1.0 }
-        return hasUltraWide ? 0.5 : 1.0
+        currentCapabilities.minimumLogicalZoom(
+            isDepthEnabled: isDepthEnabled,
+            isFront: currentPosition == .front
+        )
     }
     
     private var maximumLogicalZoom: CGFloat {
-        if currentPosition == .front || isDepthEnabled {
-            return maxDigitalZoomForUI
-        }
-        
-        let base = max(lensBaseZoom, hasTelephoto ? 2.0 : 1.0)
-        return max(maxDigitalZoomForUI, base * maxZoomFactor)
+        currentCapabilities.maximumLogicalZoom(
+            isDepthEnabled: isDepthEnabled,
+            isFront: currentPosition == .front
+        )
     }
     
     private func clamp(_ value: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
         min(max(value, lo), hi)
     }
     
-    private func hasDevice(_ type: AVCaptureDevice.DeviceType) -> Bool {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [type],
-            mediaType: .video,
-            position: .back
-        )
-        return !discovery.devices.isEmpty
-    }
-    
-    private var hasUltraWide: Bool { hasDevice(.builtInUltraWideCamera) }
-    private var hasTelephoto: Bool { hasDevice(.builtInTelephotoCamera) }
+    private var hasUltraWide: Bool { backCapabilities.hasUltraWide }
+    private var hasTelephoto: Bool { backCapabilities.hasTelephoto }
     
     private func backDevice(for lens: LensKind) -> AVCaptureDevice? {
-        let type: AVCaptureDevice.DeviceType
-        
         switch lens {
         case .ultra:
-            type = .builtInUltraWideCamera
+            return backCapabilities.ultraWideDevice ?? backCapabilities.wideDevice
         case .tele:
-            type = .builtInTelephotoCamera
+            return backCapabilities.telephotoDevice ?? backCapabilities.wideDevice
         case .wide, .depth, .front:
-            type = .builtInWideAngleCamera
+            return backCapabilities.wideDevice
         }
-        
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [type, .builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera],
-            mediaType: .video,
-            position: .back
-        )
-        return discovery.devices.first(where: { $0.deviceType == type }) ?? discovery.devices.first
     }
     
     /// Безопасно ставит device.videoZoomFactor (вызывать на sessionQueue)
@@ -726,7 +691,6 @@ extension CameraManager {
         
         lastLensSwitchTime = now
         let targetBase = lensBaseZoom(for: targetDevice.deviceType)
-        
         
         session.beginConfiguration()
         DepthManager.shared.removeDepthOutput(from: session)
@@ -879,7 +843,6 @@ extension CameraManager {
     
     // MARK: - Depth Management
     func applyDepthPolicy(needsDepth: Bool, reason: String) {
-        
         if FramePipeline.shared.isRecording {
             DebugLog.warning("CameraManager: Depth policy change blocked during recording")
             return
@@ -898,7 +861,6 @@ extension CameraManager {
     }
     
     private func setDepthEnabled(_ enabled: Bool, reason: String) {
-        
         if enabled && currentPosition == .front {
             DebugLog.warning("CameraManager: Depth requested on front camera, ignoring")
             return
@@ -915,14 +877,7 @@ extension CameraManager {
             defer { self.session.commitConfiguration() }
             
             if enabled {
-                
-                let lidarDiscovery = AVCaptureDevice.DiscoverySession(
-                    deviceTypes: [.builtInLiDARDepthCamera],
-                    mediaType: .video,
-                    position: .back
-                )
-                
-                if let lidarDevice = lidarDiscovery.devices.first {
+                if let lidarDevice = self.backCapabilities.lidarDevice {
                     self.lastAppliedLogicalZoom = 1.0
                     self.lastRequestedLogicalZoom = 1.0
                     self.configureCamera(device: lidarDevice, enableDepth: true)
@@ -931,39 +886,25 @@ extension CameraManager {
                         self.isDepthEnabled = true
                         self.currentZoomFactor = 1.0
                     }
-                } else {
-                    
-                    let wideDiscovery = AVCaptureDevice.DiscoverySession(
-                        deviceTypes: [.builtInWideAngleCamera],
-                        mediaType: .video,
-                        position: .back
-                    )
-                    
-                    if let wideDevice = wideDiscovery.devices.first {
-                        let hasDepthFormats = wideDevice.formats.contains { !$0.supportedDepthDataFormats.isEmpty }
-                        if hasDepthFormats {
-                            self.lastAppliedLogicalZoom = 1.0
-                            self.lastRequestedLogicalZoom = 1.0
-                            self.configureCamera(device: wideDevice, enableDepth: true)
-                            
-                            DispatchQueue.main.async {
-                                self.isDepthEnabled = true
-                                self.currentZoomFactor = 1.0
-                            }
-                        } else {
-                            DebugLog.error("CameraManager: No depth support available on this device")
+                } else if let wideDevice = self.backCapabilities.wideDevice {
+                    let hasDepthFormats = wideDevice.formats.contains { !$0.supportedDepthDataFormats.isEmpty }
+                    if hasDepthFormats {
+                        self.lastAppliedLogicalZoom = 1.0
+                        self.lastRequestedLogicalZoom = 1.0
+                        self.configureCamera(device: wideDevice, enableDepth: true)
+                        
+                        DispatchQueue.main.async {
+                            self.isDepthEnabled = true
+                            self.currentZoomFactor = 1.0
                         }
+                    } else {
+                        DebugLog.error("CameraManager: No depth support available on this device")
                     }
+                } else {
+                    DebugLog.error("CameraManager: No back wide camera available for depth")
                 }
             } else {
-                
-                let wideDiscovery = AVCaptureDevice.DiscoverySession(
-                    deviceTypes: [.builtInWideAngleCamera],
-                    mediaType: .video,
-                    position: .back
-                )
-                
-                if let wideDevice = wideDiscovery.devices.first {
+                if let wideDevice = self.backCapabilities.wideDevice {
                     self.lastAppliedLogicalZoom = 1.0
                     self.lastRequestedLogicalZoom = 1.0
                     self.configureCamera(device: wideDevice, enableDepth: false)
@@ -1011,7 +952,6 @@ extension CameraManager {
         if depthConnection.isVideoMirroringSupported {
             depthConnection.isVideoMirrored = shouldMirror
         }
-        
     }
 }
 
