@@ -56,3 +56,15 @@ as long as **clear attribution to the author is provided**.
 You may **not** copy, reuse, modify, redistribute, or use this code in commercial or non-commercial software without prior written permission from the author.
 
 For commercial licensing or collaboration inquiries, contact the author.
+
+---
+
+## Project Status
+
+This repository contains a **research and development version** of the Lens engine.
+
+The version published here is intended for **learning, experimentation, and portfolio demonstration purposes**.  
+The App Store release of Lens may differ from the public repository and can include additional optimizations, features, or architectural changes.
+
+---
+
