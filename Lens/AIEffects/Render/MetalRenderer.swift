@@ -250,7 +250,7 @@ final class MetalRenderer: RenderEngine {
             isFirstFrame = false
             
             let rotationDegrees = Int(rotation * 180 / .pi)
-            let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
+            let deviceType = cameraManager?.activeVideoDevice?.deviceType.rawValue ?? "unknown"
             let isFront = cameraManager?.isFrontCamera ?? false
             let deviceIdiom = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
             let contentsScale = metalLayer.contentsScale
@@ -268,7 +268,7 @@ final class MetalRenderer: RenderEngine {
             lastDiagnosticPrintTime = now
             
             let rotationDegrees = Int(rotation * 180 / .pi)
-            let deviceType = cameraManager?.currentInput?.device.deviceType.rawValue ?? "unknown"
+            let deviceType = cameraManager?.activeVideoDevice?.deviceType.rawValue ?? "unknown"
             let isFront = cameraManager?.isFrontCamera ?? false
             let deviceIdiom = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
             let contentsScale = metalLayer.contentsScale
