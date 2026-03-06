@@ -28,7 +28,7 @@ struct CameraCanvasView: View {
             MetalView(renderer: renderer)
                 .aspectRatio(9.0 / 16.0, contentMode: .fit)
                 .gesture(combinedGestures)
-                .onReceive(orientationManager.$currentOrientation) { newOrientation in
+                .onReceive(orientationManager.$currentOrientation) { _ in
                     // Логируем изменения размера drawable при смене ориентации
                     let width = Int(renderer.metalLayer.drawableSize.width)
                     let height = Int(renderer.metalLayer.drawableSize.height)
@@ -49,20 +49,22 @@ struct CameraCanvasView: View {
 
     // MARK: - Combined Gestures
     private var combinedGestures: some Gesture {
-        // 1. Pinch to zoom
         MagnificationGesture()
             .onChanged { value in
                 if abs(value - 1.0) < 0.02 {
                     pinchStartZoom = cameraManager.currentZoomFactor
                 }
-                cameraManager.setZoom(pinchStartZoom * value)
+                let requested = pinchStartZoom * value
+                
+                // ✅ FIX: во время pinch не переключаем линзы
+                cameraManager.setZoomDuringGesture(requested)
             }
             .onEnded { _ in
+                // ✅ FIX: завершение через setZoomDuringGesture для стабильных 60 FPS
+                cameraManager.setZoomDuringGesture(cameraManager.currentZoomFactor)
                 pinchStartZoom = cameraManager.currentZoomFactor
             }
-            // 2. Horizontal swipe для смены эффектов
             .simultaneously(with: horizontalSwipeGesture)
-            // 3. Vertical drag для intensity
             .simultaneously(with: verticalIntensityGesture)
     }
     

@@ -7,8 +7,6 @@ final class CameraManager: NSObject, ObservableObject {
     // MARK: - Public
     let session = AVCaptureSession()
     
-    
-    
     /// Замыкание для получения кадра
     var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
     
@@ -33,7 +31,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
-    /// Текущий зум фактор
+    /// Текущий зум фактор (логический: 0.5 / 1 / 2 / ...)
     @Published var currentZoomFactor: CGFloat = 1.0
     
     /// Статус depth (включён/выключен)
@@ -180,7 +178,7 @@ final class CameraManager: NSObject, ObservableObject {
         case .authorized:
             startSession()
         case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
+            AVCaptureDevice.requestAccess(for: .audio) { _ in
                 // Запускаем даже если микрофон запрещён (просто без звука)
                 self.startSession()
             }
@@ -317,15 +315,14 @@ final class CameraManager: NSObject, ObservableObject {
         // Определяем нужен ли depth для текущего фильтра
         let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
         let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
-            
-            if enableDepth {
-                print("🟢 CameraManager: Enabling depth (back x1 + depth filter)")
-            } else {
-                print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
-            }
-            
+        
+        if enableDepth {
+            print("🟢 CameraManager: Enabling depth (back x1 + depth filter)")
+        } else {
+            print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
+        }
+        
         // Используем универсальный метод конфигурации
-        // (он сам управляет beginConfiguration/commitConfiguration)
         session.beginConfiguration()
         
         // Удаляем depth output если меняем камеру
@@ -339,7 +336,9 @@ final class CameraManager: NSObject, ObservableObject {
         
         updateZoomLimits(for: device)
         print("✅ CameraManager: Switched to \(device.localizedName)")
-        setZoom(1.0) // Сбросить на оптический базовый зум
+        
+        // Важно: после смены линзы, deviceZoomFactor = 1.0 -> логический = base
+        DispatchQueue.main.async { self.currentZoomFactor = self.logicalFromDeviceZoom(1.0) }
     }
     
     private func updateZoomLimits(for device: AVCaptureDevice) {
@@ -579,67 +578,124 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
     }
 }
 
-// MARK: - Zoom Control
+// MARK: - Zoom Control (stable)
 extension CameraManager {
+    
+    // Базовый "логический" коэффициент для текущей линзы.
+    // Wide = 1.0, UltraWide = 0.5, Tele = 2.0
+    private var lensBaseZoom: CGFloat {
+        if currentPosition == .front { return 1.0 }
+        if isDepthEnabled { return 1.0 }
+        
+        switch currentBackDeviceType {
+        case .builtInUltraWideCamera: return 0.5
+        case .builtInTelephotoCamera: return 2.0
+        default: return 1.0
+        }
+    }
+    
+    private func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(v, lo), hi)
+    }
+    
+    private func logicalFromDeviceZoom(_ deviceZoom: CGFloat) -> CGFloat {
+        lensBaseZoom * deviceZoom
+    }
+    
+    private func deviceZoomFromLogical(_ logicalZoom: CGFloat) -> CGFloat {
+        logicalZoom / max(lensBaseZoom, 0.0001)
+    }
+    
+    private func hasDevice(_ type: AVCaptureDevice.DeviceType) -> Bool {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [type],
+            mediaType: .video,
+            position: .back
+        )
+        return !discovery.devices.isEmpty
+    }
+    
+    private var hasUltraWide: Bool { hasDevice(.builtInUltraWideCamera) }
+    private var hasTelephoto: Bool { hasDevice(.builtInTelephotoCamera) }
+    
+    // Устанавливаем device.videoZoomFactor (это ВНУТРИ-линзовый зум),
+    // а currentZoomFactor обновляем как логический (base * deviceZoom).
+    private func setDeviceZoom(_ deviceZoom: CGFloat) {
+        guard let device = self.currentInput?.device else { return }
+        let hwMax = min(self.maxZoomFactor, device.activeFormat.videoMaxZoomFactor)
+        let clamped = max(self.minZoomFactor, min(deviceZoom, hwMax))
+        
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = clamped
+            device.unlockForConfiguration()
+            let logical = self.logicalFromDeviceZoom(clamped)
+            DispatchQueue.main.async { self.currentZoomFactor = logical }
+        } catch {
+            print("❌ Failed to set zoom: \(error)")
+        }
+    }
+    
+    /// Старый API оставляем (чтобы ничего не сломать),
+    /// но теперь это "цифровой зум на текущей линзе" (без переключения линз).
     func setZoom(_ factor: CGFloat) {
         sessionQueue.async {
+            // factor здесь трактуем как deviceZoomFactor (как было раньше)
+            self.setDeviceZoom(factor)
+        }
+    }
+    
+    /// ✅ Во время gesture (pinch/rotation): ТОЛЬКО digital на текущей линзе.
+    /// НИКАКИХ switchToDevice / configureCamera.
+    /// ✅ FIX: Digital zoom во время жеста БЕЗ переключения устройств для стабильных 60 FPS
+    func setZoomDuringGesture(_ requestedLogical: CGFloat) {
+        sessionQueue.async {
             guard let device = self.currentInput?.device else { return }
-            let hardwareMax = device.activeFormat.videoMaxZoomFactor
-            let clampedZoom = max(self.minZoomFactor, min(factor, min(self.maxZoomFactor, hardwareMax)))
-            do {
-                try device.lockForConfiguration()
-                device.videoZoomFactor = clampedZoom
-                device.unlockForConfiguration()
-                DispatchQueue.main.async { self.currentZoomFactor = clampedZoom }
-            } catch {
-                print("❌ Failed to set zoom: \(error)")
+            let hwMax = min(self.maxZoomFactor, device.activeFormat.videoMaxZoomFactor)
+            
+            // Определяем диапазон zoom для current устройства
+            let minZoom: CGFloat
+            let maxZoom: CGFloat
+            
+            if self.currentPosition == .front || self.isDepthEnabled {
+                // Front camera и depth режим: 1.0 - hwMax
+                minZoom = 1.0
+                maxZoom = hwMax
+            } else {
+                // Back camera: используем широкий диапазон без переключения устройств
+                // Современные wide камеры поддерживают 0.5x-3.0x digital zoom
+                minZoom = 0.5  // Эмуляция ultrawide
+                maxZoom = min(3.0, hwMax)  // До 3x или max устройства
+            }
+            
+            let logical = self.clamp(requestedLogical, minZoom, maxZoom)
+            self.setDeviceZoom(logical)  // Прямой digital zoom без switchToDevice
+            
+            // ✅ FIX: Логирование для подтверждения отсутствия переключения устройств
+            if logical != requestedLogical {
+                print("🔍 Zoom clamped: \(String(format: "%.1f", requestedLogical)) → \(String(format: "%.1f", logical)) (digital only, no device switch)")
             }
         }
     }
     
+    /// ✅ FIX: Убираем переключение физических устройств для устранения FPS дропа
+    /// Используем только digital zoom для поддержания стабильных 60 FPS
+    func finalizeZoomAfterGesture(_ targetLogical: CGFloat) {
+        print("🔍 Zoom finalized: \(String(format: "%.1f", targetLogical)) (digital zoom for stable 60 FPS)")
+        setZoomDuringGesture(targetLogical)
+    }
+    
+    /// Preset = это намеренный выбор линзы, значит делаем finalize.
     func zoom(to preset: ZoomPreset) {
         // Блокируем зум если depth включён и пытаемся переключиться не на 1x
         if isDepthEnabled && preset != .wide {
             print("🚫 Zoom preset blocked because depth is enabled - only 1x allowed")
             return
         }
-        
-        sessionQueue.async {
-            // Подбираем оптимальную камеру под пресет
-            switch preset {
-            case .ultraWide:
-                // Доступно только на back
-                guard self.currentPosition == .back else {
-                    DispatchQueue.main.async { self.setZoom(1.0) }
-                    return
-                }
-                self.switchToDevice(type: .builtInUltraWideCamera, position: .back)
-            case .wide:
-                self.switchToDevice(type: .builtInWideAngleCamera, position: self.currentPosition)
-            case .telephoto:
-                if self.currentPosition == .back {
-                    // Пытаемся включить телекамеру, иначе цифровой 2x на широкоугольной
-                    let discovery = AVCaptureDevice.DiscoverySession(
-                        deviceTypes: [.builtInTelephotoCamera],
-                        mediaType: .video,
-                        position: .back
-                    )
-                    if discovery.devices.isEmpty {
-                        // Нет телекамеры — цифровой зум на широкоугольной
-                        self.switchToDevice(type: .builtInWideAngleCamera, position: .back)
-                        self.setZoom(2.0)
-                    } else {
-                        self.switchToDevice(type: .builtInTelephotoCamera, position: .back)
-                    }
-                } else {
-                    // На фронталке телекамеры нет — цифровой зум 2x
-                    self.setZoom(2.0)
-                }
-            }
-        }
+        finalizeZoomAfterGesture(preset.rawValue)
     }
     
-    // MARK: - Depth Management
+    // MARK: - Depth Management (как было)
     /// Централизованный метод управления depth политикой
     func applyDepthPolicy(needsDepth: Bool, reason: String) {
         print("🎯 CameraManager: applyDepthPolicy(needsDepth: \(needsDepth)) - \(reason)")
@@ -812,5 +868,37 @@ enum ZoomPreset: CGFloat, CaseIterable {
         case .wide: return "1×"
         case .telephoto: return "2×"
         }
+    }
+}
+
+// MARK: - UI helpers (оставил как у тебя)
+extension CameraManager {
+    var hasUltraWideForUI: Bool {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInUltraWideCamera],
+            mediaType: .video,
+            position: .back
+        )
+        return !discovery.devices.isEmpty
+    }
+
+    var maxDigitalZoomForUI: CGFloat {
+        // логический максимум: base(2x если tele) * hwMax
+        guard let device = currentInput?.device else { return 10.0 }
+        let hwMax = min(maxZoomFactor, device.activeFormat.videoMaxZoomFactor)
+
+        if currentPosition == .back, !isDepthEnabled, hasTelephotoForUI {
+            return 2.0 * hwMax
+        }
+        return hwMax
+    }
+
+    var hasTelephotoForUI: Bool {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInTelephotoCamera],
+            mediaType: .video,
+            position: .back
+        )
+        return !discovery.devices.isEmpty
     }
 }

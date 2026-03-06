@@ -101,6 +101,9 @@ struct CameraOverlay: View {
 
             ZoomPresetRow(cameraManager: cameraManager)
                 .offset(x: zoomOffset.x, y: zoomOffset.y)
+            
+            ZoomDial(cameraManager: cameraManager, isLiDARMode: framePipeline.isDepthModeActive)
+                .offset(x: 0, y: zoomOffset.y + 72)
 
             CaptureControls(
                 cameraManager: cameraManager,
