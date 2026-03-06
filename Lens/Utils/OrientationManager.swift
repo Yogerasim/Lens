@@ -40,7 +40,6 @@ final class OrientationManager: ObservableObject {
             rotationAngle = newRotationAngle
             
             let degrees = Int(newRotationAngle * 180 / .pi)
-            print("🧭 Orientation changed: \(orientationName(newOrientation)), rotation=\(degrees)°")
         }
     }
     

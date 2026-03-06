@@ -57,11 +57,9 @@ struct CameraOverlay: View {
                 MediaHubTabView(
                     onClose: {
                         isMediaHubPresented = false
-                        print("📱 MediaHub closed")
                     },
                     onSelectEffect: { filter in
                         shaderManager.selectShader(by: filter.shaderName)
-                        print("🎨 Selected filter: \(filter.name), shader: \(filter.shaderName), needsDepth: \(filter.needsDepth)")
                     },
                     cameraManager: cameraManager,
                     shaderManager: shaderManager,

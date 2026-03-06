@@ -95,8 +95,6 @@ final class CameraManager: NSObject, ObservableObject {
             // Используем inputPriority чтобы вручную выбирать формат с depth
             self.session.sessionPreset = .inputPriority
             
-            print("🔵 CameraManager: Configuring session at startup")
-            print("   ℹ️ LiDAR will be enabled on demand when depth filter is selected")
             
             self.configureOutputs()
             
@@ -113,7 +111,6 @@ final class CameraManager: NSObject, ObservableObject {
             
             if let videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first {
                 self.configureCamera(device: videoDevice, enableDepth: false)
-                print("🔵 CameraManager: Depth will be enabled on demand (when depth filter selected)")
             } else {
                 print("❌ No video device found")
             }
@@ -153,7 +150,6 @@ final class CameraManager: NSObject, ObservableObject {
                         if self.session.canAddInput(inAudio) {
                             self.session.addInput(inAudio)
                             self.audioInput = inAudio
-                            print("✅ Audio input configured")
                         }
                     } catch {
                         print("⚠️ Failed to create audio input: \(error)")
@@ -210,7 +206,6 @@ final class CameraManager: NSObject, ObservableObject {
                 if let device = self.currentInput?.device {
                     self.updateZoomLimits(for: device)
                 }
-                print("✅ Camera session started")
             }
         }
     }
@@ -227,7 +222,6 @@ final class CameraManager: NSObject, ObservableObject {
     func enableDepth() {
         sessionQueue.async {
             guard !DepthManager.shared.isActive else {
-                print("🔵 CameraManager: Depth already active")
                 return
             }
             
@@ -236,15 +230,12 @@ final class CameraManager: NSObject, ObservableObject {
                 return
             }
             
-            print("ℹ️ CameraManager: Use setDepthEnabled method instead of enableDepth")
-            print("✅ CameraManager: Depth enabled")
         }
     }
     
     func disableDepth() {
         sessionQueue.async {
             guard DepthManager.shared.isActive else {
-                print("🔵 CameraManager: Depth already inactive")
                 return
             }
             
@@ -252,7 +243,6 @@ final class CameraManager: NSObject, ObservableObject {
             DepthManager.shared.removeDepthOutput(from: self.session)
             self.session.commitConfiguration()
             
-            print("✅ CameraManager: Depth disabled")
         }
     }
     
@@ -270,9 +260,6 @@ final class CameraManager: NSObject, ObservableObject {
         
         let newPosition: AVCaptureDevice.Position = currentPosition == .back ? .front : .back
         
-        print("📷 CameraManager: Switching camera...")
-        print("   📍 From: \(currentPosition == .front ? "FRONT" : "BACK")")
-        print("   📍 To: \(newPosition == .front ? "FRONT" : "BACK")")
         
         sessionQueue.async {
             if self.isDepthEnabled && newPosition == .front {
@@ -295,7 +282,6 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Internal helpers
     private func switchToDevice(type: AVCaptureDevice.DeviceType, position: AVCaptureDevice.Position) {
-        print("📸 CameraManager: Switching to \(type) at \(position == .back ? "BACK" : "FRONT")")
         
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInUltraWideCamera, .builtInWideAngleCamera, .builtInTelephotoCamera],
@@ -316,19 +302,15 @@ final class CameraManager: NSObject, ObservableObject {
         }
         
         let newRotation = (position == .front) ? -Float.pi / 2.0 : Float.pi / 2.0
-        print("🧭 CameraManager: rotation updated = \(newRotation) (\(Int(newRotation * 180 / .pi))°), mirrored=\(position == .front)")
         
         let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
         let enableDepth = position == .back && type == .builtInWideAngleCamera && needsDepth
         
         if enableDepth {
-            print("🟢 CameraManager: Enabling depth (back x1 + depth filter)")
         } else {
-            print("⚪ CameraManager: Depth not enabled (filter doesn't need it or wrong camera)")
         }
         
         session.beginConfiguration()
-        print("🔴 CameraManager: Removing depth output before switch")
         DepthManager.shared.removeDepthOutput(from: session)
         configureCamera(device: device, enableDepth: enableDepth)
         session.commitConfiguration()
@@ -336,7 +318,6 @@ final class CameraManager: NSObject, ObservableObject {
         updateZoomLimits(for: device)
         
         let resetLogical = position == .front ? 1.0 : lensBaseZoom(for: device.deviceType)
-        print("✅ CameraManager: Switched to \(device.localizedName)")
         DispatchQueue.main.async {
             self.currentZoomFactor = resetLogical
         }
@@ -353,9 +334,6 @@ final class CameraManager: NSObject, ObservableObject {
     
     /// Универсальный метод конфигурации камеры (для обычного режима и depth)
     private func configureCamera(device: AVCaptureDevice, enableDepth: Bool) {
-        print("📷 Configuring camera:")
-        print("   📷 Active device: \(device.deviceType.rawValue)")
-        print("   📊 Depth enabled: \(enableDepth)")
         
         if let existing = currentInput {
             session.removeInput(existing)
@@ -381,7 +359,6 @@ final class CameraManager: NSObject, ObservableObject {
         let selectedFormat: AVCaptureDevice.Format?
         
         if enableDepth {
-            print("🔍 Looking for depth format...")
             selectedFormat = findBestDepthFormat(for: device)
             if selectedFormat == nil {
                 print("❌ CameraManager: No depth-compatible format found")
@@ -400,16 +377,13 @@ final class CameraManager: NSObject, ObservableObject {
         if enableDepth {
             DepthManager.shared.setupDepthOutput(for: session)
             synchronizeDepthOrientation()
-            print("✅ CameraManager: Depth output configured")
         } else {
             DepthManager.shared.removeDepthOutput(from: session)
-            print("✅ CameraManager: Depth output removed")
         }
         
         updateZoomLimits(for: device)
         applyDeviceZoomForCurrentLogicalIfNeeded(on: device)
         
-        print("✅ CameraManager: Camera configured successfully")
     }
     
     // MARK: - Format Selection
@@ -425,7 +399,6 @@ final class CameraManager: NSObject, ObservableObject {
             }
             if let best = candidates.max(by: { effectiveMaxFPS(for: $0) < effectiveMaxFPS(for: $1) }) {
                 let dim = CMVideoFormatDescriptionGetDimensions(best.formatDescription)
-                print("📐 Depth format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: best)))")
                 return best
             }
         }
@@ -442,7 +415,6 @@ final class CameraManager: NSObject, ObservableObject {
         
         if let fallback {
             let dim = CMVideoFormatDescriptionGetDimensions(fallback.formatDescription)
-            print("📐 Depth fallback format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: fallback)))")
         }
         
         return fallback
@@ -463,7 +435,6 @@ final class CameraManager: NSObject, ObservableObject {
             
             if let best = candidates.max(by: { scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS) }) {
                 let dim = CMVideoFormatDescriptionGetDimensions(best.formatDescription)
-                print("📐 Video format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: best)))")
                 return best
             }
         }
@@ -471,7 +442,6 @@ final class CameraManager: NSObject, ObservableObject {
         let fallback = formats.max { scoreForVideoFormat($0, preferredFPS: preferredFPS) < scoreForVideoFormat($1, preferredFPS: preferredFPS) }
         if let fallback {
             let dim = CMVideoFormatDescriptionGetDimensions(fallback.formatDescription)
-            print("📐 Video fallback format selected: \(dim.width)x\(dim.height), fps<=\(Int(effectiveMaxFPS(for: fallback)))")
         }
         return fallback ?? device.activeFormat
     }
@@ -532,9 +502,7 @@ final class CameraManager: NSObject, ObservableObject {
             device.unlockForConfiguration()
             
             let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            print("🎞️ Active format: \(dim.width)x\(dim.height) @ \(Int(targetFPS))fps")
             let depthSupported = !format.supportedDepthDataFormats.isEmpty
-            print("📊 Format supports depth: \(depthSupported ? "YES" : "NO")")
         } catch {
             print("❌ CameraManager: Failed to configure format: \(error)")
         }
@@ -559,10 +527,6 @@ final class CameraManager: NSObject, ObservableObject {
             connection.isVideoMirrored = shouldMirror
         }
         
-        print("✅ CameraManager: Video connection configured")
-        print("   📷 Position: \(currentPosition == .front ? "FRONT" : "BACK")")
-        print("   🔄 Orientation: portrait (90°)")
-        print("   🪞 Mirrored: \(shouldMirror)")
     }
 }
 
@@ -717,18 +681,15 @@ extension CameraManager {
             
         case .wide:
             if hasUltraWide && logical < zoomHysteresis.wideToUltra {
-                print("🧲 Hysteresis: wide -> ultra, logical=\(String(format: "%.2f", logical)) < \(zoomHysteresis.wideToUltra)")
                 return .ultra
             }
             if hasTelephoto && logical > zoomHysteresis.wideToTele {
-                print("🧲 Hysteresis: wide -> tele, logical=\(String(format: "%.2f", logical)) > \(zoomHysteresis.wideToTele)")
                 return .tele
             }
             return .wide
             
         case .tele:
             if logical < zoomHysteresis.teleToWide {
-                print("🧲 Hysteresis: tele -> wide, logical=\(String(format: "%.2f", logical)) < \(zoomHysteresis.teleToWide)")
                 return .wide
             }
             return .tele
@@ -748,7 +709,6 @@ extension CameraManager {
         
         let now = CFAbsoluteTimeGetCurrent()
         guard now - lastLensSwitchTime >= minimumLensSwitchInterval else {
-            print("⏱️ Lens switch skipped by cooldown")
             applyDigitalZoomOnly(logical: logical, publishLogical: true)
             return
         }
@@ -767,8 +727,6 @@ extension CameraManager {
         lastLensSwitchTime = now
         let targetBase = lensBaseZoom(for: targetDevice.deviceType)
         
-        print("🔁 Lens switch: \(currentLensType.rawValue) -> \(newLens.rawValue) [\(reason)]")
-        print("   requested logical: \(String(format: "%.2f", logical))x")
         
         session.beginConfiguration()
         DepthManager.shared.removeDepthOutput(from: session)
@@ -782,7 +740,6 @@ extension CameraManager {
         lastAppliedLogicalZoom = appliedLogical
         lastRequestedLogicalZoom = appliedLogical
         
-        print("✅ Lens switched -> \(newLens.rawValue), deviceZoom=\(String(format: "%.2f", deviceZoom)), appliedLogical=\(String(format: "%.2f", appliedLogical))x")
         updateLogicalZoom(appliedLogical)
     }
     
@@ -805,7 +762,6 @@ extension CameraManager {
         lastAppliedLogicalZoom = publishedLogical
         lastRequestedLogicalZoom = requestedLogical
         
-        print("🔍 Zoom apply: requestedLogical=\(String(format: "%.2f", requestedLogical))x, deviceZoom=\(String(format: "%.2f", deviceZoom)), lens=\(currentLensType.rawValue)")
         updateLogicalZoom(publishedLogical)
     }
     
@@ -816,7 +772,6 @@ extension CameraManager {
             self.lensSwitchWorkItem?.cancel()
             self.lensSwitchWorkItem = nil
             self.lastRequestedLogicalZoom = self.currentZoomFactor
-            print("🤏 Zoom gesture began, logical=\(String(format: "%.2f", self.lastRequestedLogicalZoom))x")
         }
     }
     
@@ -847,7 +802,6 @@ extension CameraManager {
             
             if self.isDepthEnabled || self.currentPosition == .front || FramePipeline.shared.isRecording {
                 self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
-                print("🏁 Zoom gesture ended (digital-only), logical=\(String(format: "%.2f", clampedLogical))x")
                 return
             }
             
@@ -858,7 +812,6 @@ extension CameraManager {
                 self.switchBackLens(to: desiredLens, targetLogicalZoom: clampedLogical, reason: "gestureEnded")
             } else {
                 self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
-                print("🏁 Zoom gesture ended, staying on lens=\(currentLens.rawValue), logical=\(String(format: "%.2f", clampedLogical))x")
             }
         }
     }
@@ -871,14 +824,12 @@ extension CameraManager {
             
             if self.isDepthEnabled {
                 let depthLogical = max(1.0, targetLogical)
-                print("🎯 Preset jump (depth): \(String(format: "%.2f", depthLogical))x")
                 self.applyDigitalZoomOnly(logical: depthLogical, publishLogical: true)
                 return
             }
             
             if self.currentPosition == .front {
                 let frontLogical = max(1.0, targetLogical)
-                print("🎯 Preset jump (front): \(String(format: "%.2f", frontLogical))x")
                 self.applyDigitalZoomOnly(logical: frontLogical, publishLogical: true)
                 return
             }
@@ -896,7 +847,6 @@ extension CameraManager {
                 self.switchBackLens(to: desiredLens, targetLogicalZoom: targetLogical, reason: "presetTap")
             } else {
                 self.applyDigitalZoomOnly(logical: targetLogical, publishLogical: true)
-                print("🎯 Preset jump on same lens: \(String(format: "%.2f", targetLogical))x")
             }
         }
     }
@@ -929,7 +879,6 @@ extension CameraManager {
     
     // MARK: - Depth Management
     func applyDepthPolicy(needsDepth: Bool, reason: String) {
-        print("🎯 CameraManager: applyDepthPolicy(needsDepth: \(needsDepth)) - \(reason)")
         
         if FramePipeline.shared.isRecording {
             print("⛔️ CameraManager: Depth policy change blocked during recording")
@@ -939,19 +888,16 @@ extension CameraManager {
         let canUseDepth = currentPosition == .back
         
         if needsDepth && canUseDepth {
-            print("🟢 CameraManager: Filter needs depth and we're on back camera")
             setDepthEnabled(true, reason: reason)
         } else if needsDepth && !canUseDepth {
             print("❌ CameraManager: Filter needs depth but we're on front camera - depth disabled")
             setDepthEnabled(false, reason: "Front camera doesn't support depth")
         } else {
-            print("⚪️ CameraManager: Filter doesn't need depth - disabling")
             setDepthEnabled(false, reason: reason)
         }
     }
     
     private func setDepthEnabled(_ enabled: Bool, reason: String) {
-        print("🔵 CameraManager: setDepthEnabled(\(enabled)) - \(reason)")
         
         if enabled && currentPosition == .front {
             print("⛔️ CameraManager: Depth requested on front camera, ignoring")
@@ -959,7 +905,6 @@ extension CameraManager {
         }
         
         guard enabled != isDepthEnabled else {
-            print("   ↪️ Depth already \(enabled ? "enabled" : "disabled"), skipping")
             return
         }
         
@@ -970,7 +915,6 @@ extension CameraManager {
             defer { self.session.commitConfiguration() }
             
             if enabled {
-                print("🟢 CameraManager: ENABLING depth - looking for LiDAR camera")
                 
                 let lidarDiscovery = AVCaptureDevice.DiscoverySession(
                     deviceTypes: [.builtInLiDARDepthCamera],
@@ -979,7 +923,6 @@ extension CameraManager {
                 )
                 
                 if let lidarDevice = lidarDiscovery.devices.first {
-                    print("✅ CameraManager: Found LiDAR camera - \(lidarDevice.localizedName)")
                     self.lastAppliedLogicalZoom = 1.0
                     self.lastRequestedLogicalZoom = 1.0
                     self.configureCamera(device: lidarDevice, enableDepth: true)
@@ -987,10 +930,8 @@ extension CameraManager {
                     DispatchQueue.main.async {
                         self.isDepthEnabled = true
                         self.currentZoomFactor = 1.0
-                        print("📱 CameraManager: UI updated - isDepthEnabled = true")
                     }
                 } else {
-                    print("⚠️ CameraManager: No LiDAR camera, trying Wide camera with depth formats")
                     
                     let wideDiscovery = AVCaptureDevice.DiscoverySession(
                         deviceTypes: [.builtInWideAngleCamera],
@@ -1001,7 +942,6 @@ extension CameraManager {
                     if let wideDevice = wideDiscovery.devices.first {
                         let hasDepthFormats = wideDevice.formats.contains { !$0.supportedDepthDataFormats.isEmpty }
                         if hasDepthFormats {
-                            print("✅ CameraManager: Wide camera has depth formats")
                             self.lastAppliedLogicalZoom = 1.0
                             self.lastRequestedLogicalZoom = 1.0
                             self.configureCamera(device: wideDevice, enableDepth: true)
@@ -1009,7 +949,6 @@ extension CameraManager {
                             DispatchQueue.main.async {
                                 self.isDepthEnabled = true
                                 self.currentZoomFactor = 1.0
-                                print("📱 CameraManager: UI updated - isDepthEnabled = true")
                             }
                         } else {
                             print("❌ CameraManager: No depth support available on this device")
@@ -1017,7 +956,6 @@ extension CameraManager {
                     }
                 }
             } else {
-                print("⚪️ CameraManager: DISABLING depth - switching to Wide camera")
                 
                 let wideDiscovery = AVCaptureDevice.DiscoverySession(
                     deviceTypes: [.builtInWideAngleCamera],
@@ -1029,13 +967,11 @@ extension CameraManager {
                     self.lastAppliedLogicalZoom = 1.0
                     self.lastRequestedLogicalZoom = 1.0
                     self.configureCamera(device: wideDevice, enableDepth: false)
-                    print("✅ CameraManager: Depth DISABLED")
                 }
                 
                 DispatchQueue.main.async {
                     self.isDepthEnabled = false
                     self.currentZoomFactor = 1.0
-                    print("📱 CameraManager: UI updated - isDepthEnabled = false")
                 }
             }
         }
@@ -1076,9 +1012,6 @@ extension CameraManager {
             depthConnection.isVideoMirrored = shouldMirror
         }
         
-        print("📐 CameraManager: Synchronized orientation for video and depth")
-        print("   📹 Video - orientation: portrait (90°), mirrored: \(shouldMirror)")
-        print("   📊 Depth - orientation: portrait (90°), mirrored: \(shouldMirror)")
     }
 }
 

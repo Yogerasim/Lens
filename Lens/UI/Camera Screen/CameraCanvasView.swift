@@ -33,7 +33,6 @@ struct CameraCanvasView: View {
                     .onReceive(orientationManager.$currentOrientation) { _ in
                         let width = Int(renderer.metalLayer.drawableSize.width)
                         let height = Int(renderer.metalLayer.drawableSize.height)
-                        print("📐 CameraCanvasView: Orientation changed, drawable=\(width)x\(height)")
                     }
                 
                 VStack(spacing: 0) {
@@ -73,7 +72,6 @@ struct CameraCanvasView: View {
                     isPinchGestureActive = true
                     pinchStartZoom = cameraManager.currentZoomFactor
                     cameraManager.zoomGestureBegan()
-                    print("🤏 Lower zoom zone BEGIN start=\(String(format: "%.2f", pinchStartZoom))x")
                 }
                 
                 let requested = pinchStartZoom * normalized
@@ -87,7 +85,6 @@ struct CameraCanvasView: View {
                 pinchStartZoom = cameraManager.currentZoomFactor
                 isPinchGestureActive = false
                 
-                print("🤏 Lower zoom zone END target=\(String(format: "%.2f", finalLogical))x")
             }
     }
     
@@ -132,7 +129,6 @@ struct CameraCanvasView: View {
         if !isIntensityGestureActive {
             isIntensityGestureActive = true
             intensityGestureStartValue = framePipeline.smoothedIntensity
-            print("🖐️ Intensity gesture BEGIN start=\(String(format: "%.2f", intensityGestureStartValue))")
         }
         
         showIntensityHUD()
@@ -148,7 +144,6 @@ struct CameraCanvasView: View {
         guard isIntensityGestureActive else { return }
         
         isIntensityGestureActive = false
-        print("🖐️ Intensity gesture END value=\(String(format: "%.2f", framePipeline.smoothedIntensity))")
         scheduleHideHUD(delay: 0.8)
     }
     

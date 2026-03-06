@@ -35,7 +35,6 @@ final class EffectGraphStore: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         
         load()
-        print("📚 EffectGraphStore: Loaded \(graphs.count) custom graphs")
     }
     
     // MARK: - Public Load (для вызова при старте App)
@@ -54,7 +53,6 @@ final class EffectGraphStore: ObservableObject {
         
         graphs.append(graphToAdd)
         save()
-        print("📚 EffectGraphStore: Added graph '\(graphToAdd.name)' with \(graphToAdd.nodes.count) nodes")
     }
     
     /// Обновляет существующий граф
@@ -62,7 +60,6 @@ final class EffectGraphStore: ObservableObject {
         if let index = graphs.firstIndex(where: { $0.id == graph.id }) {
             graphs[index] = graph
             save()
-            print("📚 EffectGraphStore: Updated graph '\(graph.name)'")
         }
     }
     
@@ -72,7 +69,6 @@ final class EffectGraphStore: ObservableObject {
             let name = graphs[index].name
             graphs.remove(at: index)
             save()
-            print("📚 EffectGraphStore: Removed graph '\(name)'")
         }
     }
     
@@ -121,7 +117,6 @@ final class EffectGraphStore: ObservableObject {
         do {
             let data = try encoder.encode(graphs)
             try data.write(to: fileURL, options: .atomic)
-            print("💾 EffectGraphStore: Saved to \(fileURL.lastPathComponent)")
         } catch {
             print("❌ EffectGraphStore: Failed to save - \(error.localizedDescription)")
         }

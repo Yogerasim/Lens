@@ -34,7 +34,6 @@ final class FrameGate {
             seconds: 1.0 / fps,
             preferredTimescale: 600
         )
-        print("🎯 FrameGate initialized with targetFPS: \(fps)")
     }
 
     // MARK: - Public API

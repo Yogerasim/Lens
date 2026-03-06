@@ -73,7 +73,6 @@ final class MetalRenderer: RenderEngine {
         self.metalLayer.pixelFormat = .bgra8Unorm
         self.metalLayer.framebufferOnly = false
         
-        print("🖼️ MetalRenderer initialized")
     }
     
     // MARK: - Setup Pixel Buffer Pool для захвата кадров
@@ -107,7 +106,6 @@ final class MetalRenderer: RenderEngine {
         DeviceCapabilities.currentCameraWidth = width
         DeviceCapabilities.currentCameraHeight = height
         
-        print("📐 PixelBuffer pool created: \(width)x\(height)")
     }
 
     // MARK: - Render
@@ -262,17 +260,6 @@ final class MetalRenderer: RenderEngine {
             
             let changeReason = isFirstFrame ? "FIRST_FRAME" : (orientationChanged ? "ORIENTATION_CHANGED" : "CAMERA_CHANGED")
             
-            print("🔄 MetalRenderer [\(deviceIdiom)] — \(changeReason):")
-            print("   📐 bounds (points): \(Int(boundsW))x\(Int(boundsH))")
-            print("   🔍 contentsScale: \(String(format: "%.1f", contentsScale))")
-            print("   📏 drawableSize (pixels): \(Int(drawableW))x\(Int(drawableH))")
-            print("   📊 viewAspect: \(String(format: "%.4f", viewAspect))")
-            print("   🖼️ inputBuffer: \(bufferWidth)x\(bufferHeight)")
-            print("   📊 textureAspectRaw: \(String(format: "%.4f", textureAspectRaw))")
-            print("   🔄 rotation: \(rotationDegrees)° — \(rotationReason)")
-            print("   ✅ effectiveTextureAspect: \(String(format: "%.4f", effectiveTextureAspect))")
-            print("   🎯 UV-crop: uvScaleX=\(String(format: "%.4f", uvScaleX)), uvScaleY=\(String(format: "%.4f", uvScaleY))")
-            print("   📷 camera: \(deviceType), isFront: \(isFront), depth: \(isDepthEnabled)")
         }
         
         // Дополнительная периодическая диагностика (раз в 2 секунды)
@@ -291,25 +278,11 @@ final class MetalRenderer: RenderEngine {
             let boundsW = metalLayer.frame.width
             let boundsH = metalLayer.frame.height
             
-            print("🔍 MetalRenderer diagnostic [\(deviceIdiom)]:")
-            print("   📐 bounds (points): \(Int(boundsW))x\(Int(boundsH))")
-            print("   🔍 contentsScale: \(String(format: "%.1f", contentsScale))")
-            print("   📏 drawableSize (pixels): \(Int(drawableW))x\(Int(drawableH))")
-            print("   📊 viewAspect: \(String(format: "%.4f", viewAspect))")
-            print("   🖼️ inputBuffer: \(bufferWidth)x\(bufferHeight)")
-            print("   📊 textureAspectRaw: \(String(format: "%.4f", textureAspectRaw))")
-            print("   🔄 rotation: \(rotationDegrees)° — \(rotationReason)")
-            print("   ✅ effectiveTextureAspect: \(String(format: "%.4f", effectiveTextureAspect))")
-            print("   🎯 UV-crop: uvScaleX=\(String(format: "%.4f", uvScaleX)), uvScaleY=\(String(format: "%.4f", uvScaleY))")
-            print("   📷 camera: \(deviceType), isFront: \(isFront), depth: \(isDepthEnabled)")
-            print("   🎭 mirror: \(mirror), hasDepth: \(hasDepth)")
-            print("   🎚️ intensity: \(String(format: "%.2f", intensity))")
             
             // Логируем depth если есть
             if let depthBuffer = depthPixelBuffer {
                 let depthW = CVPixelBufferGetWidth(depthBuffer)
                 let depthH = CVPixelBufferGetHeight(depthBuffer)
-                print("   📊 depthBuffer: \(depthW)x\(depthH), flipY=\(depthFlipY)")
             }
         }
 

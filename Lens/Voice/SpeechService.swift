@@ -62,7 +62,6 @@ final class SpeechService: ObservableObject {
         
         if speechGranted {
             permissionStatus = .authorized
-            print("🎤 SpeechService: All permissions granted")
             return true
         } else {
             permissionStatus = .denied
@@ -81,7 +80,6 @@ final class SpeechService: ObservableObject {
         onError: @escaping (Error) -> Void
     ) {
         guard !isListening else {
-            print("🎤 SpeechService: Already listening")
             return
         }
         
@@ -105,7 +103,6 @@ final class SpeechService: ObservableObject {
         do {
             try startAudioEngine()
             isListening = true
-            print("🎤 SpeechService: Started listening")
         } catch {
             onError(error)
             print("🎤 SpeechService: Failed to start - \(error.localizedDescription)")
@@ -126,7 +123,6 @@ final class SpeechService: ObservableObject {
         recognitionTask = nil
         
         isListening = false
-        print("🎤 SpeechService: Stopped listening")
     }
     
     // MARK: - Private Methods

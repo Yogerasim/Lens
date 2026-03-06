@@ -31,11 +31,9 @@ final class DepthManager: NSObject {
 
     private override init() {
         super.init()
-        print("🔵 DepthManager: Initialized")
     }
 
     func setupDepthOutput(for session: AVCaptureSession) {
-        print("🔵 DepthManager: Setting up depth output...")
 
         let output = AVCaptureDepthDataOutput()
         output.setDelegate(self, callbackQueue: depthQueue)
@@ -58,12 +56,10 @@ final class DepthManager: NSObject {
 
         if let connection = output.connection(with: .depthData) {
             connection.isEnabled = true
-            print("✅ DepthManager: Depth connection enabled")
         } else {
             print("⚠️ DepthManager: No depth connection available")
         }
 
-        print("✅ DepthManager: Depth output added successfully")
     }
 
     func removeDepthOutput(from session: AVCaptureSession) {
@@ -74,12 +70,10 @@ final class DepthManager: NSObject {
         latestDepthMap = nil
         latestDepthTime = .invalid
         lastDeliveredTime = .invalid
-        print("🔵 DepthManager: Depth output removed")
     }
 
     static func isDepthSupported(for device: AVCaptureDevice) -> Bool {
         let supported = device.formats.contains { !$0.supportedDepthDataFormats.isEmpty }
-        print("🔵 DepthManager: Depth supported on \(device.localizedName): \(supported ? "YES" : "NO")")
         return supported
     }
 }
@@ -116,7 +110,6 @@ extension DepthManager: AVCaptureDepthDataOutputDelegate {
             lastLogTime = timestamp
             let w = CVPixelBufferGetWidth(depthMap)
             let h = CVPixelBufferGetHeight(depthMap)
-            print("📊 DepthManager: depth \(w)x\(h), ts: \(String(format: "%.2f", timestamp.seconds))")
         }
 
         onDepthMap?(depthMap, timestamp)
@@ -130,6 +123,5 @@ extension DepthManager: AVCaptureDepthDataOutputDelegate {
         reason: AVCaptureOutput.DataDroppedReason
     ) {
         // С discard late + throttle это должно резко уменьшиться
-        print("⚠️ DepthManager: Dropped depth frame - \(reason)")
     }
 }

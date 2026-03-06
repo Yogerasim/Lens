@@ -30,7 +30,6 @@ final class GraphSessionController: ObservableObject {
     
     private init() {
         draftGraph = EffectGraph(name: "Draft")
-        print("🎨 GraphSessionController: Initialized with empty draft")
     }
     
     // MARK: - Startup Restoration
@@ -42,7 +41,6 @@ final class GraphSessionController: ObservableObject {
            let id = UUID(uuidString: idString),
            let graph = store.find(byId: id) {
             
-            print("🔄 GraphSessionController: Restoring last active effect '\(graph.name)'")
             
             draftGraph = graph
             selectedGraphId = graph.id
@@ -53,7 +51,6 @@ final class GraphSessionController: ObservableObject {
                 shaderManager.selectShader(by: customFilter.shaderName)
             }
         } else {
-            print("🔄 GraphSessionController: No last active effect found, using default")
             // Выбираем дефолтный built-in фильтр
             if let firstFilter = FilterLibrary.shared.filters.first(where: { $0.shaderName != "fragment_universalgraph" }) {
                 shaderManager.selectShader(by: firstFilter.shaderName)
@@ -65,7 +62,6 @@ final class GraphSessionController: ObservableObject {
     private func saveLastActiveEffect() {
         if let id = selectedGraphId {
             UserDefaults.standard.set(id.uuidString, forKey: lastActiveEffectIdKey)
-            print("💾 GraphSessionController: Saved last active effect ID")
         } else {
             UserDefaults.standard.removeObject(forKey: lastActiveEffectIdKey)
         }
@@ -89,7 +85,6 @@ final class GraphSessionController: ObservableObject {
         _ = draftGraph.addNode(node)
         isCustomGraphActive = true
         
-        print("🎨 GraphSession: Added node '\(type.displayName)' (\(draftGraph.nodes.count)/\(EffectGraph.maxNodes))")
         return (true, "✅ Добавлено: \(type.displayName)")
     }
     
@@ -104,7 +99,6 @@ final class GraphSessionController: ObservableObject {
             isCustomGraphActive = false
         }
         
-        print("🎨 GraphSession: Removed node '\(removed.type.displayName)'")
         return (true, "✅ Удалено: \(removed.type.displayName)")
     }
     
@@ -116,7 +110,6 @@ final class GraphSessionController: ObservableObject {
         selectedGraphId = nil
         saveLastActiveEffect()
         
-        print("🎨 GraphSession: Cleared all nodes")
         return (true, "✅ Граф очищен")
     }
     
@@ -136,7 +129,6 @@ final class GraphSessionController: ObservableObject {
         selectedGraphId = graphToSave.id
         saveLastActiveEffect()
         
-        print("🎨 GraphSession: Saved graph '\(graphName)' with \(graphToSave.nodes.count) nodes")
         return (true, "✅ Сохранено: \(graphName)")
     }
     
@@ -158,7 +150,6 @@ final class GraphSessionController: ObservableObject {
         isCustomGraphActive = true
         saveLastActiveEffect()
         
-        print("🎨 GraphSession: Selected graph '\(graph.name)' with \(graph.nodes.count) nodes")
         return (true, "✅ Загружено: \(graph.name)")
     }
     
@@ -167,7 +158,6 @@ final class GraphSessionController: ObservableObject {
         draftGraph = EffectGraph(name: "Draft")
         selectedGraphId = nil
         isCustomGraphActive = false
-        print("🎨 GraphSession: Created new draft")
     }
     
     // MARK: - Mix Operations
@@ -187,7 +177,6 @@ final class GraphSessionController: ObservableObject {
         
         let percentA = Int(ratioA * 100)
         let percentB = Int(ratioB * 100)
-        print("🎨 GraphSession: Set mix \(effectA) \(percentA)% + \(effectB) \(percentB)%")
         return (true, "✅ Микс: \(effectA) \(percentA)% + \(effectB) \(percentB)%")
     }
     

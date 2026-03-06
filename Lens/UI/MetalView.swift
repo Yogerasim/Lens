@@ -61,11 +61,6 @@ final class MetalHostView: UIView {
             
             // Диагностика для iPad vs iPhone
             let deviceType = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-            print("🧱 MetalLayer drawableSize updated [\(deviceType)]:")
-            print("   📐 bounds (points): \(Int(bounds.width))x\(Int(bounds.height))")
-            print("   🔍 nativeScale: \(nativeScale)")
-            print("   📏 drawableSize (pixels): \(Int(drawableSize.width))x\(Int(drawableSize.height))")
-            print("   📊 viewAspect: \(String(format: "%.4f", drawableSize.width / drawableSize.height))")
         }
     }
     

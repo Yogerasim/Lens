@@ -111,7 +111,6 @@ struct EffectResolver {
         
         // Exact match
         if let filter = builtInMap[key] {
-            print("🔍 EffectResolver: Found built-in '\(filter.name)' for '\(name)' (key: '\(key)')")
             return filter
         }
         
@@ -124,13 +123,11 @@ struct EffectResolver {
                 
                 // Если есть общие токены и они составляют большую часть запроса
                 if !overlap.isEmpty && Float(overlap.count) / Float(tokens.count) >= 0.6 {
-                    print("🔍 EffectResolver: Found built-in '\(filter.name)' for '\(name)' via token overlap")
                     return filter
                 }
             }
         }
         
-        print("🔍 EffectResolver: No built-in effect found for '\(name)'")
         return nil
     }
     
@@ -146,7 +143,6 @@ struct EffectResolver {
         // Exact match по каноническому ключу
         for graph in store.graphs {
             if canonicalKey(graph.name) == key {
-                print("🔍 EffectResolver: Found custom '\(graph.name)' for '\(name)' (exact)")
                 return graph
             }
         }
@@ -154,12 +150,10 @@ struct EffectResolver {
         // Partial match
         for graph in store.graphs {
             if canonicalKey(graph.name).contains(key) || key.contains(canonicalKey(graph.name)) {
-                print("🔍 EffectResolver: Found custom '\(graph.name)' for '\(name)' (partial)")
                 return graph
             }
         }
         
-        print("🔍 EffectResolver: No custom effect found for '\(name)'")
         return nil
     }
     
@@ -177,7 +171,6 @@ struct EffectResolver {
             return .custom(custom)
         }
         
-        print("🔍 EffectResolver: No effect found for '\(name)'")
         return nil
     }
     

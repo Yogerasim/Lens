@@ -25,7 +25,6 @@ final class FPSCounter: ObservableObject {
 
             if now - self.lastTime >= 1.0 {
                 self.fps = self.frames  // Сначала сохраняем
-                print("📈 Camera FPS =", self.fps)
                 self.frames = 0         // Потом сбрасываем
                 self.lastTime = now
             }
@@ -39,7 +38,6 @@ final class FPSCounter: ObservableObject {
             
             if now - self.lastRecordingTime >= 1.0 {
                 self.recordingFPS = self.recordingFrames
-                print("🎬 Recording FPS =", self.recordingFPS)
                 self.recordingFrames = 0
                 self.lastRecordingTime = now
             }

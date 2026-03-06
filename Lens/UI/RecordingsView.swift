@@ -25,7 +25,6 @@ struct RecordingsView: View {
     }
 
     private func share(_ item: CaptureItem) {
-        print("Share: \(item.id)")
     }
 }
 

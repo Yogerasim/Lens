@@ -86,8 +86,6 @@ final class FramePipeline: ObservableObject {
                 }
             }
 
-            print("🎬 FramePipeline: activeFilter -> \(filter.name), needsDepth=\(filter.needsDepth)")
-            print("🎛️ Filter '\(filter.name)' needsDepth=\(filter.needsDepth) supportsIntensity=\(filter.supportsIntensity)")
 
             if isRecording {
                 print("⛔️ Ignored depth reconfigure during recording - only shader change allowed")
@@ -109,7 +107,6 @@ final class FramePipeline: ObservableObject {
         if newValue != isDepthModeActive {
             DispatchQueue.main.async {
                 self.isDepthModeActive = newValue
-                print("🧭 UI depthModeActive = \(newValue)")
             }
         }
     }
@@ -146,7 +143,6 @@ final class FramePipeline: ObservableObject {
         let now = CACurrentMediaTime()
         if now - lastIntensityLogTime > intensityLogInterval {
             lastIntensityLogTime = now
-            print("🎚️ target=\(String(format: "%.2f", targetIntensity)) smooth=\(String(format: "%.2f", smoothedIntensity))")
         }
     }
 
@@ -164,15 +160,12 @@ final class FramePipeline: ObservableObject {
         recordingHasDepth = activeFilter?.needsDepth == true && cameraManager?.isDepthEnabled == true
         recordingDepthBuffer = DepthManager.shared.latestDepthPixelBuffer
         recordingFilterFamily = (activeFilter?.needsDepth == true) ? .depth : .nonDepth
-        print("🎬 FramePipeline: Recording started, hasDepth=\(recordingHasDepth)")
-        print("🎥 Recording locked to \(recordingFilterFamily?.rawValue ?? "UNKNOWN") filters")
     }
 
     func stopRecording() {
         isRecording = false
         recordingDepthBuffer = nil
         recordingFilterFamily = nil
-        print("🎬 FramePipeline: Recording stopped, filter lock released")
     }
 
     func updateRecordingDepthBuffer(_ depthBuffer: CVPixelBuffer) {
@@ -226,15 +219,11 @@ final class FramePipeline: ObservableObject {
             self.renderer?.render(packet: packet, activeFilter: self.activeFilter)
         }
 
-        print("📱 Device: \(DeviceCapabilities.current.modelName)")
-        print("📹 Max FPS: \(DeviceCapabilities.current.maxFPS)")
-        print("🎬 FramePipeline: Initialized with filter '\(activeFilter?.name ?? "none")'")
 
         orientationCancellable = OrientationManager.shared.$rotationAngle
             .sink { [weak self] newRotation in
                 self?.interfaceRotation = newRotation
                 let degrees = Int(newRotation * 180 / .pi)
-                print("🧭 FramePipeline: interfaceRotation updated = \(degrees)°")
             }
     }
 

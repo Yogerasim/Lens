@@ -13,7 +13,6 @@ struct VoiceCommandExecutor {
         framePipeline: FramePipeline = .shared
     ) -> ExecResult {
         
-        print("🎙️ VoiceCommandExecutor: Executing command - \(command)")
         
         switch command {
             
@@ -288,7 +287,6 @@ struct VoiceCommandExecutor {
         // 6. Активируем Custom Graph
         activateCustomGraphMode(shaderManager: shaderManager)
         
-        print("🎉 VoiceCommandExecutor: Created effect '\(finalName!)' with mix=\(recipe.mixA ?? "nil")+\(recipe.mixB ?? "nil"), nodes=\(recipe.nodesToAdd.map { $0.rawValue })")
         
         return .success("✅ Создан: \(finalName!)", appliedEffect: true, createdGraph: true)
     }
@@ -299,7 +297,6 @@ struct VoiceCommandExecutor {
     private static func activateCustomGraphMode(shaderManager: ShaderManager) {
         if let customFilter = FilterLibrary.shared.filters.first(where: { $0.shaderName == "fragment_universalgraph" }) {
             shaderManager.selectShader(by: customFilter.shaderName)
-            print("🎨 VoiceCommandExecutor: Activated Custom Graph mode")
         }
     }
     
@@ -307,7 +304,6 @@ struct VoiceCommandExecutor {
     private static func deactivateCustomGraphMode(shaderManager: ShaderManager) {
         if let firstFilter = FilterLibrary.shared.filters.first(where: { $0.shaderName != "fragment_universalgraph" }) {
             shaderManager.selectShader(by: firstFilter.shaderName)
-            print("🎨 VoiceCommandExecutor: Deactivated Custom Graph mode")
         }
     }
 }

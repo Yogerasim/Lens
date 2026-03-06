@@ -163,77 +163,63 @@ struct VoiceCommandParser {
     static func parse(_ text: String) -> VoiceCommand {
         let normalized = normalizeText(text)
         
-        print("🎤 VoiceCommandParser: Parsing '\(text)'")
-        print("   📝 Normalized: '\(normalized)'")
         
         // 1. Проверяем создание/ремикс эффекта (высший приоритет)
         if let recipeCommand = parseRecipeCommand(normalized, original: text) {
-            print("   ✅ Parsed as recipe command")
             return recipeCommand
         }
         
         // 2. Проверяем команду применения эффекта
         if let applyCommand = parseApplyEffect(normalized) {
-            print("   ✅ Parsed as apply effect")
             return applyCommand
         }
         
         // 3. Проверяем установку эффекта с интенсивностью ("комик на 30")
         if let intensityFilterCommand = parseSetFilterWithIntensity(normalized) {
-            print("   ✅ Parsed as set filter with intensity")
             return intensityFilterCommand
         }
         
         // 4. Проверяем запись
         if let recordingCommand = parseRecording(normalized) {
-            print("   ✅ Parsed as recording")
             return recordingCommand
         }
         
         // 5. Проверяем интенсивность
         if let intensityCommand = parseIntensity(normalized) {
-            print("   ✅ Parsed as intensity")
             return intensityCommand
         }
         
         // 6. Проверяем зум
         if let zoomCommand = parseZoom(normalized) {
-            print("   ✅ Parsed as zoom")
             return zoomCommand
         }
         
         // 7. Проверяем переключение камеры
         if let cameraCommand = parseCamera(normalized) {
-            print("   ✅ Parsed as camera switch")
             return cameraCommand
         }
         
         // 8. Проверяем фото
         if let photoCommand = parsePhoto(normalized) {
-            print("   ✅ Parsed as photo")
             return photoCommand
         }
         
         // 9. Проверяем добавление узла (low-level)
         if let nodeCommand = parseAddNode(normalized) {
-            print("   ✅ Parsed as add node")
             return nodeCommand
         }
         
         // 10. Проверяем удаление/очистку
         if let editCommand = parseEditCommands(normalized) {
-            print("   ✅ Parsed as edit command")
             return editCommand
         }
         
         // 11. Проверяем выбор built-in фильтра
         if let filterCommand = parseFilter(normalized) {
-            print("   ✅ Parsed as select filter")
             return filterCommand
         }
         
         // Не распознано
-        print("   ❓ Unknown command")
         return .unknown(suggestions)
     }
     
@@ -280,7 +266,6 @@ struct VoiceCommandParser {
                     let effectName = source.displayName
                     if !foundEffects.contains(effectName) {
                         foundEffects.append(effectName)
-                        print("   🔍 Found effect: '\(effectName)' from '\(candidate)'")
                     }
                 }
             }
@@ -324,7 +309,6 @@ struct VoiceCommandParser {
         let signalCount = (hasCreateKeyword ? 1 : 0) + (hasMixKeyword ? 1 : 0) + foundEffects.count + nodesToAdd.count
         
         if signalCount >= 2 && recipe.isValid {
-            print("   🧩 Recipe: mix=\(recipe.mixA ?? "nil")+\(recipe.mixB ?? "nil"), nodes=\(recipe.nodesToAdd), name=\(recipe.name ?? "auto")")
             return .createEffect(recipe)
         }
         
@@ -375,7 +359,6 @@ struct VoiceCommandParser {
                         if let percent = Int(percentStr), percent >= 0, percent <= 100 {
                             // Проверяем что эффект существует
                             if EffectResolver.effectExists(name: effectName) {
-                                print("   🎯 Found setFilterWithIntensity: '\(effectName)' at \(percent)%")
                                 return .setFilterWithIntensity(effectName: effectName, percent: percent)
                             }
                         }
@@ -544,10 +527,8 @@ struct VoiceCommandParser {
                 if let source = EffectResolver.resolveAnyEffect(name: candidate) {
                     switch source {
                     case .builtIn(let filter):
-                        print("   🔍 Found built-in filter: '\(filter.name)' from '\(candidate)'")
                         return .selectFilter(filter)
                     case .custom(let graph):
-                        print("   🔍 Found custom effect: '\(graph.name)' from '\(candidate)'")
                         return .applyEffect(name: graph.name)
                     }
                 }

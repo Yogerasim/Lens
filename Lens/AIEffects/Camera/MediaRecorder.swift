@@ -105,7 +105,6 @@ final class MediaRecorder: NSObject, ObservableObject {
                 self.audioSampleCount = 0
                 writer.startSession(atSourceTime: sampleTime)
                 self.sessionStarted = true
-                print("✅ Recording session started, baseTime=\(String(format: "%.3f", sampleTime.seconds))s")
             }
             
             // Пропускаем кадры с неправильным временем (раньше начала сессии)
@@ -123,7 +122,6 @@ final class MediaRecorder: NSObject, ObservableObject {
             let elapsed = CMTimeSubtract(sampleTime, baseTime).seconds
             if self.videoFrameCount % 30 == 0 {
                 let currentFPS = elapsed > 0 ? Double(self.videoFrameCount) / elapsed : 0
-                print("🎞️ video frame=\(self.videoFrameCount) pts=\(String(format: "%.3f", sampleTime.seconds))s elapsed=\(String(format: "%.1f", elapsed))s fps=\(String(format: "%.1f", currentFPS))")
             }
             
             // ✅ Записываем кадр с РЕАЛЬНЫМ timestamp из capture session
@@ -157,7 +155,6 @@ final class MediaRecorder: NSObject, ObservableObject {
             // Диагностика каждую секунду (~44100 сэмплов)
             if self.audioSampleCount % 44100 == 0 {
                 let elapsed = CMTimeSubtract(audioTime, baseTime).seconds
-                print("🎵 audio samples=\(self.audioSampleCount) pts=\(String(format: "%.3f", audioTime.seconds))s elapsed=\(String(format: "%.1f", elapsed))s")
             }
             
             // ✅ Записываем аудио с ОРИГИНАЛЬНЫМ timestamp — он из той же capture session что и видео
@@ -243,8 +240,6 @@ final class MediaRecorder: NSObject, ObservableObject {
             videoFrameCount = 0
             audioSampleCount = 0
             
-            print("✅ AssetWriter ready: \(tempURL.lastPathComponent)")
-            print("🎬 Video settings: \(videoWidth)x\(videoHeight)")
             
         } catch {
             print("❌ Failed to create AssetWriter: \(error)")
@@ -312,7 +307,6 @@ final class MediaRecorder: NSObject, ObservableObject {
             } completionHandler: { success, error in
                 DispatchQueue.main.async {
                     if success {
-                        print("✅ Video saved to Photo Library")
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                     } else {
@@ -348,7 +342,6 @@ final class MediaRecorder: NSObject, ObservableObject {
             } completionHandler: { success, error in
                 DispatchQueue.main.async {
                     if success {
-                        print("✅ Photo saved to Photo Library")
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                     } else {
