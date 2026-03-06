@@ -49,7 +49,7 @@ final class SpeechService: ObservableObject {
         
         guard microphoneGranted else {
             permissionStatus = .denied
-            print("🎤 SpeechService: Microphone permission denied")
+            DebugLog.voice("SpeechService: Microphone permission denied")
             return false
         }
         
@@ -65,7 +65,7 @@ final class SpeechService: ObservableObject {
             return true
         } else {
             permissionStatus = .denied
-            print("🎤 SpeechService: Speech recognition permission denied")
+            DebugLog.voice("SpeechService: Speech recognition permission denied")
             return false
         }
     }
@@ -105,7 +105,7 @@ final class SpeechService: ObservableObject {
             isListening = true
         } catch {
             onError(error)
-            print("🎤 SpeechService: Failed to start - \(error.localizedDescription)")
+            DebugLog.voice("SpeechService: Failed to start - \(error.localizedDescription)")
         }
     }
     

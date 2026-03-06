@@ -28,7 +28,7 @@ final class OrientationManager: ObservableObject {
         guard let windowScene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first else {
-            print("⚠️ OrientationManager: No window scene found")
+            DebugLog.warning("OrientationManager: No window scene found")
             return
         }
         

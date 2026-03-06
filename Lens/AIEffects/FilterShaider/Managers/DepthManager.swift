@@ -45,7 +45,7 @@ final class DepthManager: NSObject {
         output.isFilteringEnabled = false
 
         guard session.canAddOutput(output) else {
-            print("❌ DepthManager: Cannot add depth output to session")
+            DebugLog.error("DepthManager: Cannot add depth output to session")
             isActive = false
             return
         }
@@ -57,7 +57,7 @@ final class DepthManager: NSObject {
         if let connection = output.connection(with: .depthData) {
             connection.isEnabled = true
         } else {
-            print("⚠️ DepthManager: No depth connection available")
+            DebugLog.warning("DepthManager: No depth connection available")
         }
 
     }

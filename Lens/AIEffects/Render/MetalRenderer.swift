@@ -435,7 +435,7 @@ final class MetalRenderer: RenderEngine {
         case kCVPixelFormatType_DisparityFloat16:
             metalFormat = .r16Float
         default:
-            print("⚠️ MetalRenderer: Unknown depth format: \(pixelFormat)")
+            DebugLog.warning("MetalRenderer: Unknown depth format: \(pixelFormat)")
             return nil
         }
         

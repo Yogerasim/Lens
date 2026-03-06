@@ -118,7 +118,7 @@ final class EffectGraphStore: ObservableObject {
             let data = try encoder.encode(graphs)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("❌ EffectGraphStore: Failed to save - \(error.localizedDescription)")
+            DebugLog.error("EffectGraphStore: Failed to save - \(error.localizedDescription)")
         }
     }
     
@@ -132,7 +132,7 @@ final class EffectGraphStore: ObservableObject {
             let data = try Data(contentsOf: fileURL)
             graphs = try decoder.decode([EffectGraph].self, from: data)
         } catch {
-            print("❌ EffectGraphStore: Failed to load - \(error.localizedDescription)")
+            DebugLog.error("EffectGraphStore: Failed to load - \(error.localizedDescription)")
             graphs = []
         }
     }

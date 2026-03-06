@@ -129,7 +129,7 @@ final class MediaRecorder: NSObject, ObservableObject {
                 self.lastVideoTime = sampleTime
                 FPSCounter.shared.tickRecording()
             } else {
-                print("❌ Failed to append video frame \(self.videoFrameCount), writer.status=\(writer.status.rawValue)")
+                DebugLog.error("Failed to append video frame \(self.videoFrameCount), writer.status=\(writer.status.rawValue)")
             }
         }
     }
@@ -159,14 +159,14 @@ final class MediaRecorder: NSObject, ObservableObject {
             
             // ✅ Записываем аудио с ОРИГИНАЛЬНЫМ timestamp — он из той же capture session что и видео
             if !input.append(sampleBuffer) {
-                print("❌ Failed to append audio sample \(self.audioSampleCount)")
+                DebugLog.error("Failed to append audio sample \(self.audioSampleCount)")
             }
         }
     }
     
     func takePhoto() {
         guard let buffer = lastRenderedBuffer else {
-            print("❌ No rendered frame available for photo")
+            DebugLog.error("No rendered frame available for photo")
             return
         }
         
@@ -242,13 +242,13 @@ final class MediaRecorder: NSObject, ObservableObject {
             
             
         } catch {
-            print("❌ Failed to create AssetWriter: \(error)")
+            DebugLog.error("Failed to create AssetWriter: \(error)")
         }
     }
     
     private func finishRecording() {
         guard let writer = assetWriter, writer.status == .writing else {
-            print("⚠️ AssetWriter not in writing state")
+            DebugLog.warning("AssetWriter not in writing state")
             return
         }
         
@@ -275,9 +275,9 @@ final class MediaRecorder: NSObject, ObservableObject {
                     self.saveVideoToLibrary(url: url)
                 }
             case .failed:
-                print("❌ Recording failed: \(writer.error?.localizedDescription ?? "unknown")")
+                DebugLog.error("Recording failed: \(writer.error?.localizedDescription ?? "unknown")")
             default:
-                print("⚠️ Recording finished with status: \(writer.status.rawValue)")
+                DebugLog.warning("Recording finished with status: \(writer.status.rawValue)")
             }
             
             // Reset
@@ -298,7 +298,7 @@ final class MediaRecorder: NSObject, ObservableObject {
     private func saveVideoToLibrary(url: URL) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
-                print("❌ Photo library access denied")
+                DebugLog.error("Photo library access denied")
                 return
             }
             
@@ -310,7 +310,7 @@ final class MediaRecorder: NSObject, ObservableObject {
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                     } else {
-                        print("❌ Failed to save video: \(error?.localizedDescription ?? "unknown")")
+                        DebugLog.error("Failed to save video: \(error?.localizedDescription ?? "unknown")")
                     }
                 }
                 // Удаляем временный файл
@@ -325,7 +325,7 @@ final class MediaRecorder: NSObject, ObservableObject {
         let context = CIContext()
         
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            print("❌ Failed to create CGImage")
+            DebugLog.error("Failed to create CGImage")
             return
         }
         
@@ -333,7 +333,7 @@ final class MediaRecorder: NSObject, ObservableObject {
         
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
-                print("❌ Photo library access denied")
+                DebugLog.error("Photo library access denied")
                 return
             }
             
@@ -345,7 +345,7 @@ final class MediaRecorder: NSObject, ObservableObject {
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                     } else {
-                        print("❌ Failed to save photo: \(error?.localizedDescription ?? "unknown")")
+                        DebugLog.error("Failed to save photo: \(error?.localizedDescription ?? "unknown")")
                     }
                 }
             }

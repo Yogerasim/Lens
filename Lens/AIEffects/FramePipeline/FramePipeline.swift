@@ -67,7 +67,7 @@ final class FramePipeline: ObservableObject {
             let isFront = cameraManager?.isFrontCamera ?? false
             if isFront && filter.needsDepth {
                 if let fallback = FilterLibrary.shared.firstNonDepthFilter() {
-                    print("⛔️ Depth filter '\(filter.name)' selected on front camera -> switching to '\(fallback.name)'")
+                    DebugLog.warning("Depth filter '\(filter.name)' selected on front camera -> switching to '\(fallback.name)'")
                     activeFilter = fallback
                     return
                 }
@@ -76,7 +76,7 @@ final class FramePipeline: ObservableObject {
             if isRecording, let family = recordingFilterFamily {
                 let filterFamily: FilterFamily = filter.needsDepth ? .depth : .nonDepth
                 if filterFamily != family {
-                    print("⛔️ Filter '\(filter.name)' blocked during recording (locked to \(family.rawValue) filters)")
+                    DebugLog.warning("Filter '\(filter.name)' blocked during recording (locked to \(family.rawValue) filters)")
                     if let fallback = FilterLibrary.shared.filters.first(where: {
                         ($0.needsDepth && family == .depth) || (!$0.needsDepth && family == .nonDepth)
                     }) {
@@ -88,12 +88,12 @@ final class FramePipeline: ObservableObject {
 
 
             if isRecording {
-                print("⛔️ Ignored depth reconfigure during recording - only shader change allowed")
+                DebugLog.warning("Ignored depth reconfigure during recording - only shader change allowed")
                 return
             }
 
             guard let camera = cameraManager else {
-                print("⚠️ FramePipeline: No cameraManager reference for depth control")
+                DebugLog.warning("FramePipeline: No cameraManager reference for depth control")
                 return
             }
 

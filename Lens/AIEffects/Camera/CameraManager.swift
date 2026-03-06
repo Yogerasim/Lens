@@ -112,7 +112,7 @@ final class CameraManager: NSObject, ObservableObject {
             if let videoDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) ?? discovery.devices.first {
                 self.configureCamera(device: videoDevice, enableDepth: false)
             } else {
-                print("❌ No video device found")
+                DebugLog.error("No video device found")
             }
             
             self.session.commitConfiguration()
@@ -152,13 +152,13 @@ final class CameraManager: NSObject, ObservableObject {
                             self.audioInput = inAudio
                         }
                     } catch {
-                        print("⚠️ Failed to create audio input: \(error)")
+                        DebugLog.warning("Failed to create audio input: \(error)")
                     }
                 } else {
-                    print("⚠️ No audio device available")
+                    DebugLog.warning("No audio device available")
                 }
             } else {
-                print("⚠️ Audio permission not granted")
+                DebugLog.warning("Audio permission not granted")
             }
         }
     }
@@ -178,11 +178,11 @@ final class CameraManager: NSObject, ObservableObject {
                 if granted {
                     self.requestAudioPermissionAndStart()
                 } else {
-                    print("❌ Camera access denied")
+                    DebugLog.error("Camera access denied")
                 }
             }
         default:
-            print("❌ Camera access denied or restricted")
+            DebugLog.error("Camera access denied or restricted")
         }
     }
     
@@ -226,7 +226,7 @@ final class CameraManager: NSObject, ObservableObject {
             }
             
             guard self.currentPosition == .back else {
-                print("⚠️ CameraManager: Depth only available on back camera")
+                DebugLog.warning("CameraManager: Depth only available on back camera")
                 return
             }
             
@@ -249,12 +249,12 @@ final class CameraManager: NSObject, ObservableObject {
     // MARK: - Switch Camera
     func switchCamera() {
         if FramePipeline.shared.isRecording {
-            print("⛔️ CameraManager: Camera switch blocked during recording")
+            DebugLog.warning("CameraManager: Camera switch blocked during recording")
             return
         }
         
         if isDepthEnabled && currentPosition == .back {
-            print("🚫 CameraManager: Front camera blocked in depth mode")
+            DebugLog.warning("CameraManager: Front camera blocked in depth mode")
             return
         }
         
@@ -263,7 +263,7 @@ final class CameraManager: NSObject, ObservableObject {
         
         sessionQueue.async {
             if self.isDepthEnabled && newPosition == .front {
-                print("🚫 CameraManager: Front camera blocked in depth mode (sessionQueue)")
+                DebugLog.warning("CameraManager: Front camera blocked in depth mode (sessionQueue)")
                 return
             }
             
@@ -272,7 +272,7 @@ final class CameraManager: NSObject, ObservableObject {
             if newPosition == .front {
                 DispatchQueue.main.async {
                     if let currentFilter = FramePipeline.shared.activeFilter, currentFilter.needsDepth {
-                        print("⛔️ CameraManager: Switching to front camera with depth filter active")
+                        DebugLog.warning("CameraManager: Switching to front camera with depth filter active")
                         FramePipeline.shared.activeFilter = currentFilter
                     }
                 }
@@ -289,7 +289,7 @@ final class CameraManager: NSObject, ObservableObject {
             position: position
         )
         guard let device = discovery.devices.first(where: { $0.deviceType == type }) ?? discovery.devices.first else {
-            print("❌ CameraManager: No device for type: \(type) position: \(position)")
+            DebugLog.error("CameraManager: No device for type: \(type) position: \(position)")
             return
         }
         
@@ -342,7 +342,7 @@ final class CameraManager: NSObject, ObservableObject {
         do {
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input) else {
-                print("❌ CameraManager: Cannot add device input")
+                DebugLog.error("CameraManager: Cannot add device input")
                 return
             }
             session.addInput(input)
@@ -352,7 +352,7 @@ final class CameraManager: NSObject, ObservableObject {
                 currentBackDeviceType = device.deviceType
             }
         } catch {
-            print("❌ CameraManager: Failed to create device input: \(error)")
+            DebugLog.error("CameraManager: Failed to create device input: \(error)")
             return
         }
         
@@ -361,7 +361,7 @@ final class CameraManager: NSObject, ObservableObject {
         if enableDepth {
             selectedFormat = findBestDepthFormat(for: device)
             if selectedFormat == nil {
-                print("❌ CameraManager: No depth-compatible format found")
+                DebugLog.error("CameraManager: No depth-compatible format found")
                 return
             }
         } else {
@@ -504,14 +504,14 @@ final class CameraManager: NSObject, ObservableObject {
             let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let depthSupported = !format.supportedDepthDataFormats.isEmpty
         } catch {
-            print("❌ CameraManager: Failed to configure format: \(error)")
+            DebugLog.error("CameraManager: Failed to configure format: \(error)")
         }
     }
     
     /// Конфигурирует video connection
     private func configureVideoConnection() {
         guard let connection = videoOutput.connection(with: .video) else {
-            print("⚠️ CameraManager: No video connection found")
+            DebugLog.warning("CameraManager: No video connection found")
             return
         }
         
@@ -643,7 +643,7 @@ extension CameraManager {
             targetDevice.videoZoomFactor = clamped
             targetDevice.unlockForConfiguration()
         } catch {
-            print("❌ Zoom error: \(error)")
+            DebugLog.error("Zoom error: \(error)")
         }
     }
     
@@ -703,7 +703,7 @@ extension CameraManager {
         guard currentPosition == .back else { return }
         guard !isDepthEnabled else { return }
         guard !FramePipeline.shared.isRecording else {
-            print("⛔️ Lens switch blocked during recording")
+            DebugLog.warning("Lens switch blocked during recording")
             return
         }
         
@@ -719,7 +719,7 @@ extension CameraManager {
         }
         
         guard let targetDevice = backDevice(for: newLens) else {
-            print("❌ No target back device for lens \(newLens.rawValue)")
+            DebugLog.error("No target back device for lens \(newLens.rawValue)")
             applyDigitalZoomOnly(logical: logical, publishLogical: true)
             return
         }
@@ -871,7 +871,7 @@ extension CameraManager {
     /// Preset кнопки
     func zoom(to preset: ZoomPreset) {
         if isDepthEnabled && preset != .wide {
-            print("🚫 Zoom preset blocked in depth mode")
+            DebugLog.warning("Zoom preset blocked in depth mode")
             return
         }
         jumpToPreset(logical: preset.rawValue)
@@ -881,7 +881,7 @@ extension CameraManager {
     func applyDepthPolicy(needsDepth: Bool, reason: String) {
         
         if FramePipeline.shared.isRecording {
-            print("⛔️ CameraManager: Depth policy change blocked during recording")
+            DebugLog.warning("CameraManager: Depth policy change blocked during recording")
             return
         }
         
@@ -890,7 +890,7 @@ extension CameraManager {
         if needsDepth && canUseDepth {
             setDepthEnabled(true, reason: reason)
         } else if needsDepth && !canUseDepth {
-            print("❌ CameraManager: Filter needs depth but we're on front camera - depth disabled")
+            DebugLog.error("CameraManager: Filter needs depth but we're on front camera - depth disabled")
             setDepthEnabled(false, reason: "Front camera doesn't support depth")
         } else {
             setDepthEnabled(false, reason: reason)
@@ -900,7 +900,7 @@ extension CameraManager {
     private func setDepthEnabled(_ enabled: Bool, reason: String) {
         
         if enabled && currentPosition == .front {
-            print("⛔️ CameraManager: Depth requested on front camera, ignoring")
+            DebugLog.warning("CameraManager: Depth requested on front camera, ignoring")
             return
         }
         
@@ -951,7 +951,7 @@ extension CameraManager {
                                 self.currentZoomFactor = 1.0
                             }
                         } else {
-                            print("❌ CameraManager: No depth support available on this device")
+                            DebugLog.error("CameraManager: No depth support available on this device")
                         }
                     }
                 }
@@ -982,7 +982,7 @@ extension CameraManager {
         guard let videoConnection = videoOutput.connection(with: .video),
               let depthOutput = DepthManager.shared.depthOutput,
               let depthConnection = depthOutput.connection(with: .depthData) else {
-            print("⚠️ CameraManager: Cannot synchronize - missing connections")
+            DebugLog.warning("CameraManager: Cannot synchronize - missing connections")
             return
         }
         
