@@ -71,7 +71,7 @@ fragment float4 fragment_dotmatrixdepth(
     float cellLarge = mix(10.0, 14.0, t);
 
     float cellPx = mix(cellSmall, cellLarge, clamp(0.55 * farMask + 0.85 * edgeMask, 0.0, 1.0));
-    float2 grid = floor(uv * texSize / cellPx);
+    
     float2 cellUV = fract(uv * texSize / cellPx);
 
     
