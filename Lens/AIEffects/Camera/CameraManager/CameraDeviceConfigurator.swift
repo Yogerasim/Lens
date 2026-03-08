@@ -149,7 +149,6 @@ extension CameraDeviceConfigurator {
     enum ConfigurationError: LocalizedError {
         case cannotAddInput
         case noDepthCompatibleFormat
-
         var errorDescription: String? {
             switch self {
             case .cannotAddInput:

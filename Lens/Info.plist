@@ -2,23 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSCameraUsageDescription</key>
-	<string>Lens needs camera access to apply real-time filters</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Lens needs microphone access to record video with sound and voice commands</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Lens needs access to save photos and videos to your library</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Lens needs speech recognition to process voice commands for controlling effects</string>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
+    <key>NSCameraUsageDescription</key>
+    <string>PhotonCam uses the camera to capture photos and videos, including real-time visual effects and depth-based features.</string>
+
+    <key>NSMicrophoneUsageDescription</key>
+    <string>PhotonCam uses the microphone to record audio together with video.</string>
+
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>PhotonCam saves captured photos and videos to your photo library.</string>
+
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>PhotonCam accesses your photo library so you can import, export, and share media.</string>
 </dict>
 </plist>
