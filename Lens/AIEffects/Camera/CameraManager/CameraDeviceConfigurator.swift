@@ -40,7 +40,8 @@ final class CameraDeviceConfigurator {
 
         configureVideoConnection(
             videoOutput: videoOutput,
-            currentPosition: currentPosition
+            currentPosition: currentPosition,
+            enableDepth: enableDepth
         )
 
         DepthManager.shared.removeDepthOutput(from: session)
@@ -75,7 +76,8 @@ final class CameraDeviceConfigurator {
 
     private func configureVideoConnection(
         videoOutput: AVCaptureVideoDataOutput,
-        currentPosition: AVCaptureDevice.Position
+        currentPosition: AVCaptureDevice.Position,
+        enableDepth: Bool
     ) {
         guard let connection = videoOutput.connection(with: .video) else {
             return
@@ -91,6 +93,12 @@ final class CameraDeviceConfigurator {
 
         if connection.isVideoMirroringSupported {
             connection.isVideoMirrored = shouldMirror
+        }
+
+        if connection.isVideoStabilizationSupported {
+            connection.preferredVideoStabilizationMode = enableDepth ? .off : .standard
+        } else {
+            connection.preferredVideoStabilizationMode = .off
         }
     }
 
@@ -117,6 +125,10 @@ final class CameraDeviceConfigurator {
 
         if videoConnection.isVideoMirroringSupported {
             videoConnection.isVideoMirrored = shouldMirror
+        }
+
+        if videoConnection.isVideoStabilizationSupported {
+            videoConnection.preferredVideoStabilizationMode = .off
         }
 
         if #available(iOS 17.0, *) {
