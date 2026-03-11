@@ -11,6 +11,11 @@ struct ContentView: View {
   private let renderer = MetalRenderer(layer: CAMetalLayer())
   @State private var pinchStartZoom: CGFloat = 1.0
 
+  // MARK: - Capture Preview
+  @State private var capturePreviewViewModel: CapturePreviewViewModel?
+  @State private var isShowingCapturePreview = false
+  private let storageService = CapturePreviewStorageService()
+
   var body: some View {
     ZStack {
       CameraCanvasView(
@@ -30,6 +35,7 @@ struct ContentView: View {
     }
     .onAppear {
       setupRenderer()
+      bindCaptureCallbacks()
       cameraManager.start()
 
       Task { @MainActor in
@@ -42,6 +48,11 @@ struct ContentView: View {
       cameraManager.stop()
       if mediaRecorder.isRecording {
         mediaRecorder.stopRecording()
+      }
+    }
+    .fullScreenCover(isPresented: $isShowingCapturePreview) {
+      if let vm = capturePreviewViewModel {
+        CapturePreviewView(viewModel: vm)
       }
     }
     .preferredColorScheme(.dark)
@@ -68,6 +79,34 @@ struct ContentView: View {
     cameraManager.onAudioSample = { sampleBuffer in
       if mediaRecorder.isRecording {
         mediaRecorder.appendAudioSample(sampleBuffer)
+      }
+    }
+  }
+
+  // MARK: - Capture Preview Binding
+
+  private func bindCaptureCallbacks() {
+    mediaRecorder.onPhotoCaptured = { [storageService] photoData in
+      Task { @MainActor in
+        do {
+          let media = try await storageService.storePhotoData(photoData)
+          capturePreviewViewModel = CapturePreviewViewModel(media: media)
+          isShowingCapturePreview = true
+        } catch {
+          print("❌ Failed to store photo: \(error)")
+        }
+      }
+    }
+
+    mediaRecorder.onVideoCaptured = { [storageService] url in
+      Task { @MainActor in
+        do {
+          let media = try await storageService.storeVideoFile(from: url)
+          capturePreviewViewModel = CapturePreviewViewModel(media: media)
+          isShowingCapturePreview = true
+        } catch {
+          print("❌ Failed to store video: \(error)")
+        }
       }
     }
   }
