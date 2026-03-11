@@ -8,6 +8,7 @@ struct ShaderDemoControls: View {
   @AppStorage("demo_maxCount") private var maxCount = 12
   @AppStorage("demo_onlyNonDepth") private var onlyNonDepth = false
   @AppStorage("demo_disableWhileRecording") private var disableWhileRecording = true
+  @AppStorage("zoom_usePhysicalLenses") private var usePhysicalLenses = true
 
   var body: some View {
     VStack(spacing: 14) {
@@ -48,6 +49,18 @@ struct ShaderDemoControls: View {
 
       Toggle("Only non-depth filters", isOn: $onlyNonDepth)
       Toggle("Pause while recording", isOn: $disableWhileRecording)
+
+      Divider()
+        .padding(.vertical, 4)
+
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Zoom")
+          .font(.headline)
+        Toggle("Physical lens switching (back camera)", isOn: $usePhysicalLenses)
+        Text("When off, all zoom is digital. Applies only to rear non-LiDAR camera.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
 
       Spacer(minLength: 0)
     }

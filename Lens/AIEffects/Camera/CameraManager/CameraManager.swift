@@ -7,6 +7,12 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var currentZoomFactor: CGFloat = 1.0
     @Published var isDepthEnabled: Bool = false
 
+    /// When false, all zoom is digital-only (no physical lens switching).
+    /// Applies only to rear non-LiDAR camera.
+    var usePhysicalLenses: Bool {
+        UserDefaults.standard.bool(forKey: "zoom_usePhysicalLenses")
+    }
+
     var onFrame: ((CVPixelBuffer, CMTime) -> Void)? {
         get { sessionController.onFrame }
         set { sessionController.onFrame = newValue }
@@ -57,8 +63,14 @@ final class CameraManager: NSObject, ObservableObject {
 
     private var sessionQueue: DispatchQueue { sessionController.sessionQueue }
 
+    /// Expose zoom controller for UI binding (ZoomGlassBar, pinch gestures)
+    var zoomControllerForUI: CameraZoomController { zoomController }
+
     override init() {
         super.init()
+        UserDefaults.standard.register(defaults: ["zoom_usePhysicalLenses": true])
+        zoomController.manager = self
+        zoomController.capabilities = backCapabilities
         configureSession()
     }
 
@@ -185,6 +197,7 @@ final class CameraManager: NSObject, ObservableObject {
 
         if position == .back {
             currentBackDeviceType = device.deviceType
+            zoomController.capabilities = capabilities
         }
 
         let needsDepth = FramePipeline.shared.activeFilter?.needsDepth ?? false
@@ -399,7 +412,8 @@ extension CameraManager {
             let clampedLogical = self.clamp(logicalZoom, self.minimumLogicalZoom, self.maxDigitalZoomForUI)
             self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
 
-            if self.currentPosition == .back && !self.isDepthEnabled {
+            // Physical lens switching: only for back camera, non-depth, with setting enabled
+            if self.currentPosition == .back && !self.isDepthEnabled && self.usePhysicalLenses {
                 let desiredLens = self.desiredLensForLiveZoom(targetLogicalZoom: clampedLogical)
                 if desiredLens != self.currentLensType {
                     self.switchBackLens(to: desiredLens, targetLogicalZoom: clampedLogical, reason: "liveZoom")
@@ -415,7 +429,8 @@ extension CameraManager {
             let clampedLogical = self.clamp(targetLogicalZoom, self.minimumLogicalZoom, self.maxDigitalZoomForUI)
             self.zoomController.endGesture(targetLogicalZoom: clampedLogical)
 
-            if self.isDepthEnabled || self.currentPosition == .front {
+            // Digital-only for depth, front, or when physical lenses disabled
+            if self.isDepthEnabled || self.currentPosition == .front || !self.usePhysicalLenses {
                 self.applyDigitalZoomOnly(logical: clampedLogical, publishLogical: true)
                 return
             }
@@ -448,13 +463,19 @@ extension CameraManager {
                 return
             }
 
-            let desiredLens = self.zoomController.preferredLensForPreset(
-                logicalZoom: targetLogical,
-                context: self.zoomContext()
-            )
+            // Physical lens switching for presets (always, even when digital-only mode)
+            // Presets are explicit user intent so we switch lenses for them
+            if self.usePhysicalLenses {
+                let desiredLens = self.zoomController.preferredLensForPreset(
+                    logicalZoom: targetLogical,
+                    context: self.zoomContext()
+                )
 
-            if desiredLens != self.currentLensType {
-                self.switchBackLens(to: desiredLens, targetLogicalZoom: targetLogical, reason: "presetTap")
+                if desiredLens != self.currentLensType {
+                    self.switchBackLens(to: desiredLens, targetLogicalZoom: targetLogical, reason: "presetTap")
+                } else {
+                    self.applyDigitalZoomOnly(logical: targetLogical, publishLogical: true)
+                }
             } else {
                 self.applyDigitalZoomOnly(logical: targetLogical, publishLogical: true)
             }

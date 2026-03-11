@@ -8,8 +8,7 @@ struct CameraOverlay: View {
     private let fpsOffset = CGPoint(x: 0, y: 0)
 
     private let filtersOffset = CGPoint(x: 0, y: -180)
-    private let zoomOffset = CGPoint(x: 0, y: -140)
-    private let zoomSliderOffset = CGPoint(x: 0, y: -92)
+    private let zoomBarOffset = CGPoint(x: 0, y: -140)
     private let captureOffset = CGPoint(x: 0, y: -50)
     private let modeOffset = CGPoint(x: 0, y: 0)
     private let switchCamOffset = CGPoint(x: 100, y: -70)
@@ -95,15 +94,13 @@ struct CameraOverlay: View {
             ShaderIndicatorRow(shaderManager: shaderManager)
                 .offset(x: filtersOffset.x, y: filtersOffset.y)
 
-            ZoomPresetRow(cameraManager: cameraManager)
-                .offset(x: zoomOffset.x, y: zoomOffset.y)
-
-            ZoomSlider(
+            ZoomGlassBar(
                 cameraManager: cameraManager,
-                isLiDARMode: framePipeline.isDepthModeActive
+                isDepthMode: framePipeline.isDepthModeActive,
+                isFrontCamera: cameraManager.isFrontCamera
             )
-            .frame(width: 240, height: 44)
-            .offset(x: zoomSliderOffset.x, y: zoomSliderOffset.y)
+            .frame(width: 250, height: 44)
+            .offset(x: zoomBarOffset.x, y: zoomBarOffset.y)
 
             CaptureControls(
                 cameraManager: cameraManager,

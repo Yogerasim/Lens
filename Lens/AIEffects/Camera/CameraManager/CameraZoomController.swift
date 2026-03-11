@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 internal import AVFoundation
 
 struct CameraZoomControllerContext {
@@ -15,6 +16,12 @@ struct CameraZoomControllerContext {
 final class CameraZoomController {
     private let policy: CameraZoomPolicy
     private(set) var state: CameraZoomState
+
+    /// Populated by CameraManager after init; used by ZoomGlassBar
+    var capabilities: CameraCapabilities = CameraCapabilities.make(position: .back)
+
+    /// Weak back-reference so UI gestures can call CameraManager zoom methods
+    weak var manager: CameraManager?
 
     init(
         policy: CameraZoomPolicy = CameraZoomPolicy(),
@@ -208,6 +215,47 @@ final class CameraZoomController {
 
     func updateAppliedLogicalZoom(_ logicalZoom: CGFloat) {
         state.updateAppliedLogicalZoom(logicalZoom)
+    }
+
+    // MARK: - Convenience methods for UI binding
+
+    /// Current logical zoom (reads last applied)
+    var logicalZoom: Float {
+        Float(state.lastAppliedLogicalZoom)
+    }
+
+    /// Begin gesture — takes current zoom automatically
+    func beginGesture() {
+        manager?.zoomGestureBegan()
+    }
+
+    /// Update gesture with requested zoom
+    func updateGesture(requestedZoom: Float) {
+        manager?.zoomGestureChanged(logicalZoom: CGFloat(requestedZoom))
+    }
+
+    /// End gesture
+    func endGesture() {
+        manager?.zoomGestureEnded(targetLogicalZoom: CGFloat(state.lastAppliedLogicalZoom))
+    }
+
+    /// Jump to preset
+    func jumpToPreset(_ factor: Float) {
+        manager?.jumpToPreset(logical: CGFloat(factor))
+    }
+
+    // MARK: - Pinch gesture support
+
+    /// Call from pinch gesture onChanged; baseZoom is zoom at gesture start
+    func pinchChanged(scale: CGFloat, baseZoom: CGFloat) {
+        let newLogical = baseZoom * scale
+        manager?.zoomGestureChanged(logicalZoom: newLogical)
+    }
+
+    /// Call from pinch gesture onEnded
+    func pinchEnded() {
+        let current = manager?.currentZoomFactor ?? 1.0
+        manager?.zoomGestureEnded(targetLogicalZoom: current)
     }
 
     private func contextDevice(context: CameraZoomControllerContext) -> AVCaptureDevice? {
