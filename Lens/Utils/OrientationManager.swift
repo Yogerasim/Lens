@@ -1,74 +1,83 @@
-import Combine
-import SwiftUI
 import UIKit
+import Combine
 
-@MainActor
 final class OrientationManager: ObservableObject {
-  static let shared = OrientationManager()
+    static let shared = OrientationManager()
 
-  @Published var currentOrientation: UIInterfaceOrientation = .portrait
-  @Published var rotationAngle: Float = 0.0  // в радианах для Metal
+    @Published private(set) var currentOrientation: UIDeviceOrientation = .portrait
+    @Published private(set) var rotationAngle: Float = 0.0
 
-  private var cancellables = Set<AnyCancellable>()
-
-  init() {
-
-    NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
-      .sink { [weak self] _ in
-        self?.updateOrientation()
-      }
-      .store(in: &cancellables)
-
-    updateOrientation()
-  }
-
-  private func updateOrientation() {
-
-    guard
-      let windowScene = UIApplication.shared.connectedScenes
-        .compactMap({ $0 as? UIWindowScene })
-        .first
-    else {
-      DebugLog.warning("OrientationManager: No window scene found")
-      return
+    private init() {
+        if Thread.isMainThread {
+            updateOrientation()
+            startObserving()
+        } else {
+            DispatchQueue.main.sync {
+                self.updateOrientation()
+                self.startObserving()
+            }
+        }
     }
 
-    let newOrientation = windowScene.interfaceOrientation
-    let newRotationAngle = rotationAngleFor(orientation: newOrientation)
-
-    if newOrientation != currentOrientation {
-      currentOrientation = newOrientation
-      rotationAngle = newRotationAngle
+    private func startObserving() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOrientationChange),
+            name: UIDevice.orientationDidChangeNotification,
+            object: nil
+        )
     }
-  }
 
-  private func rotationAngleFor(orientation: UIInterfaceOrientation) -> Float {
-
-    switch orientation {
-    case .portrait:
-      return Float.pi / 2.0  // 90° - поворачиваем landscape буфер в portrait
-    case .landscapeRight:
-      return 0.0  // 0° - буфер уже в правильной ориентации
-    case .landscapeLeft:
-      return Float.pi  // 180° - поворачиваем на 180°
-    case .portraitUpsideDown:
-      return -Float.pi / 2.0  // -90°
-    default:
-      return Float.pi / 2.0  // default к portrait
+    @objc private func handleOrientationChange() {
+        updateOrientation()
     }
-  }
 
-  private func orientationName(_ orientation: UIInterfaceOrientation) -> String {
-    switch orientation {
-    case .portrait: return "portrait"
-    case .landscapeLeft: return "landscapeLeft"
-    case .landscapeRight: return "landscapeRight"
-    case .portraitUpsideDown: return "portraitUpsideDown"
-    default: return "unknown"
+    private func updateOrientation() {
+        if Thread.isMainThread {
+            applyCurrentInterfaceOrientation()
+        } else {
+            DispatchQueue.main.async {
+                self.applyCurrentInterfaceOrientation()
+            }
+        }
     }
-  }
 
-  func forceUpdate() {
-    updateOrientation()
-  }
+    private func applyCurrentInterfaceOrientation() {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first else {
+            return
+        }
+
+        let interfaceOrientation = windowScene.interfaceOrientation
+
+        let newOrientation: UIDeviceOrientation
+        let newRotation: Float
+
+        switch interfaceOrientation {
+        case .portrait:
+            newOrientation = .portrait
+            newRotation = 0.0
+        case .portraitUpsideDown:
+            newOrientation = .portraitUpsideDown
+            newRotation = .pi
+        case .landscapeLeft:
+            newOrientation = .landscapeRight
+            newRotation = -.pi / 2.0
+        case .landscapeRight:
+            newOrientation = .landscapeLeft
+            newRotation = .pi / 2.0
+        default:
+            newOrientation = .portrait
+            newRotation = 0.0
+        }
+
+        if currentOrientation != newOrientation {
+            currentOrientation = newOrientation
+        }
+
+        if rotationAngle != newRotation {
+            rotationAngle = newRotation
+        }
+    }
 }

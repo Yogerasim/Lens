@@ -19,6 +19,11 @@ final class CameraSessionController: NSObject {
 
   override init() {
     super.init()
+
+    if #available(iOS 18.0, *) {
+      session.automaticallyConfiguresApplicationAudioSession = true
+      session.configuresApplicationAudioSessionToMixWithOthers = true
+    }
   }
 
   func configureOutputs() {
