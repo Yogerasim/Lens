@@ -14,6 +14,9 @@ final class MediaRecorder: NSObject, ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var captureMode: CaptureMode = .photo
     
+    var onPhotoCaptured: ((Data) -> Void)?
+    var onVideoCaptured: ((URL) -> Void)?
+    
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
@@ -27,7 +30,6 @@ final class MediaRecorder: NSObject, ObservableObject {
     private var sessionStarted = false
     
     private var videoFrameCount: Int64 = 0
-    
     private var audioSampleCount: Int64 = 0
     
     private let writerQueue = DispatchQueue(label: "media.recorder.queue", qos: .userInitiated)
@@ -35,6 +37,7 @@ final class MediaRecorder: NSObject, ObservableObject {
     private var videoWidth: Int {
         DeviceCapabilities.currentCameraWidth
     }
+    
     private var videoHeight: Int {
         DeviceCapabilities.currentCameraHeight
     }
@@ -47,7 +50,6 @@ final class MediaRecorder: NSObject, ObservableObject {
     
     func startRecording() {
         guard !isRecording else { return }
-
         
         writerQueue.async {
             self.setupAssetWriter()
@@ -74,7 +76,6 @@ final class MediaRecorder: NSObject, ObservableObject {
     }
     
     func appendVideoFrame(_ pixelBuffer: CVPixelBuffer, sampleTime: CMTime, hasDepth: Bool = false) {
-        
         lastRenderedBuffer = pixelBuffer
         
         guard isRecording else { return }
@@ -148,7 +149,14 @@ final class MediaRecorder: NSObject, ObservableObject {
         }
         
         writerQueue.async {
-            self.savePhotoToLibrary(pixelBuffer: buffer)
+            guard let photoData = self.makeJPEGData(from: buffer) else {
+                DebugLog.error("Failed to prepare JPEG photo data")
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.onPhotoCaptured?(photoData)
+            }
         }
     }
     
@@ -228,6 +236,7 @@ final class MediaRecorder: NSObject, ObservableObject {
         let totalFrames = videoFrameCount
         let totalAudioSamples = audioSampleCount
         let elapsed: Double
+        
         if let base = sessionBaseTime {
             elapsed = CMTimeSubtract(lastVideoTime, base).seconds
         } else {
@@ -243,11 +252,16 @@ final class MediaRecorder: NSObject, ObservableObject {
                 print(
                     "✅ Recording completed: \(totalFrames) frames, \(totalAudioSamples) audio samples, \(String(format: "%.1f", elapsed))s, avg \(String(format: "%.1f", avgFPS)) fps"
                 )
+                
                 if let url = self.videoURL {
-                    self.saveVideoToLibrary(url: url)
+                    DispatchQueue.main.async {
+                        self.onVideoCaptured?(url)
+                    }
                 }
+                
             case .failed:
                 DebugLog.error("Recording failed: \(writer.error?.localizedDescription ?? "unknown")")
+                
             default:
                 DebugLog.warning("Recording finished with status: \(writer.status.rawValue)")
             }
@@ -258,68 +272,23 @@ final class MediaRecorder: NSObject, ObservableObject {
             self.pixelBufferAdaptor = nil
             self.sessionStarted = false
             
-            
             DispatchQueue.main.async {
                 FPSCounter.shared.recordingFPS = 0
             }
         }
     }
     
-    private func saveVideoToLibrary(url: URL) {
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else {
-                DebugLog.error("Photo library access denied")
-                return
-            }
-            
-            PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
-            } completionHandler: { success, error in
-                DispatchQueue.main.async {
-                    if success {
-                        let generator = UINotificationFeedbackGenerator()
-                        generator.notificationOccurred(.success)
-                    } else {
-                        DebugLog.error("Failed to save video: \(error?.localizedDescription ?? "unknown")")
-                    }
-                }
-                
-                try? FileManager.default.removeItem(at: url)
-            }
-        }
-    }
-    
-    private func savePhotoToLibrary(pixelBuffer: CVPixelBuffer) {
-        
+    private func makeJPEGData(from pixelBuffer: CVPixelBuffer) -> Data? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         let context = CIContext()
         
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            DebugLog.error("Failed to create CGImage")
-            return
+            DebugLog.error("Failed to create CGImage from pixel buffer")
+            return nil
         }
         
         let image = UIImage(cgImage: cgImage)
-        
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else {
-                DebugLog.error("Photo library access denied")
-                return
-            }
-            
-            PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAsset(from: image)
-            } completionHandler: { success, error in
-                DispatchQueue.main.async {
-                    if success {
-                        let generator = UINotificationFeedbackGenerator()
-                        generator.notificationOccurred(.success)
-                    } else {
-                        DebugLog.error("Failed to save photo: \(error?.localizedDescription ?? "unknown")")
-                    }
-                }
-            }
-        }
+        return image.jpegData(compressionQuality: 0.95)
     }
     
     private func startRecordingTimer() {
