@@ -1,59 +1,64 @@
 import SwiftUI
 import AVKit
+import Combine
 
-struct VideoPreviewPlayerView: UIViewControllerRepresentable {
+struct VideoPreviewPlayerView: View {
     let url: URL
-    var isMuted: Bool = true
-    var shouldLoop: Bool = true
-
-    func makeUIViewController(context: Context) -> PlayerViewController {
-        let controller = PlayerViewController()
-        controller.configure(url: url, isMuted: isMuted, shouldLoop: shouldLoop)
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: PlayerViewController, context: Context) {
-        uiViewController.configure(url: url, isMuted: isMuted, shouldLoop: shouldLoop)
+    @StateObject private var coordinator = PlayerCoordinator()
+    
+    var body: some View {
+        VideoPlayer(player: coordinator.player)
+            .background(Color.black)
+            .onAppear {
+                coordinator.setup(url: url)
+                coordinator.play()
+            }
+            .onDisappear {
+                coordinator.pause()
+            }
     }
 }
 
-final class PlayerViewController: AVPlayerViewController {
-    private var currentURL: URL?
-    private var queuePlayer: AVQueuePlayer?
-    private var playerLooper: AVPlayerLooper?
-
-    func configure(url: URL, isMuted: Bool, shouldLoop: Bool) {
-        guard currentURL != url else {
-            queuePlayer?.isMuted = isMuted
-            return
-        }
-
-        currentURL = url
-
+/// StateObject-based coordinator — AVPlayer живёт стабильно вне SwiftUI reinit cycles
+private final class PlayerCoordinator: ObservableObject {
+    let player = AVPlayer()
+    private var endObserver: Any?
+    
+    func setup(url: URL) {
+        // Убираем старый observer если view переиспользуется
+        removeEndObserver()
+        
         let item = AVPlayerItem(url: url)
-        let player = AVQueuePlayer()
-
-        if shouldLoop {
-            playerLooper = AVPlayerLooper(player: player, templateItem: item)
-        } else {
-            player.insert(item, after: nil)
-            playerLooper = nil
+        player.replaceCurrentItem(with: item)
+        
+        // Looping: при окончании — seek на начало и play
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            self?.player.seek(to: .zero)
+            self?.player.play()
         }
-
-        player.isMuted = isMuted
-        player.actionAtItemEnd = .none
-
-        self.player = player
-        self.queuePlayer = player
-
-        showsPlaybackControls = true
-        videoGravity = .resizeAspect
-
+    }
+    
+    func play() {
+        player.seek(to: .zero)
         player.play()
     }
-
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        queuePlayer?.pause()
+    
+    func pause() {
+        player.pause()
+    }
+    
+    private func removeEndObserver() {
+        if let obs = endObserver {
+            NotificationCenter.default.removeObserver(obs)
+            endObserver = nil
+        }
+    }
+    
+    deinit {
+        removeEndObserver()
     }
 }

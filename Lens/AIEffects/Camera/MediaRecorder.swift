@@ -65,13 +65,21 @@ final class MediaRecorder: NSObject, ObservableObject {
     func stopRecording() {
         guard isRecording else { return }
         
+        // Сначала останавливаем таймер UI
         DispatchQueue.main.async {
-            self.isRecording = false
             self.stopRecordingTimer()
         }
         
+        // isRecording сбрасываем ДО writerQueue, чтобы новые кадры не попадали
+        // но finishRecording вызываем на writerQueue чтобы все уже поставленные в очередь кадры дописались
         writerQueue.async {
+            // На этом этапе все ранее enqueued appendVideoFrame/appendAudioSample уже выполнены
+            // потому что writerQueue — serial queue
             self.finishRecording()
+            
+            DispatchQueue.main.async {
+                self.isRecording = false
+            }
         }
     }
     
@@ -230,9 +238,6 @@ final class MediaRecorder: NSObject, ObservableObject {
             return
         }
         
-        videoInput?.markAsFinished()
-        audioInput?.markAsFinished()
-        
         let totalFrames = videoFrameCount
         let totalAudioSamples = audioSampleCount
         let elapsed: Double
@@ -242,6 +247,16 @@ final class MediaRecorder: NSObject, ObservableObject {
         } else {
             elapsed = 0
         }
+        
+        // Завершаем сессию в точке последнего видеокадра —
+        // это обрезает audio track до того же момента,
+        // предотвращая ситуацию "видео кончилось, а звук ещё идёт"
+        if lastVideoTime.isValid && lastVideoTime != .zero {
+            writer.endSession(atSourceTime: lastVideoTime)
+        }
+        
+        videoInput?.markAsFinished()
+        audioInput?.markAsFinished()
         
         writer.finishWriting { [weak self] in
             guard let self = self else { return }
