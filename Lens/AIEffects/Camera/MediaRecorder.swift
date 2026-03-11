@@ -12,7 +12,7 @@ final class MediaRecorder: NSObject, ObservableObject {
     
     @Published var isRecording = false
     @Published var recordingDuration: TimeInterval = 0
-    @Published var captureMode: CaptureMode = .video
+    @Published var captureMode: CaptureMode = .photo
     
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
