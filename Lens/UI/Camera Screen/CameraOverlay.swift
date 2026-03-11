@@ -7,8 +7,8 @@ struct CameraOverlay: View {
 
     private let fpsOffset = CGPoint(x: 0, y: 0)
 
-    private let filtersOffset = CGPoint(x: 0, y: -180)
-    private let zoomBarOffset = CGPoint(x: 0, y: -140)
+    private let filtersOffset = CGPoint(x: 0, y: -195)
+    private let zoomBarOffset = CGPoint(x: 0, y: -142)
     private let captureOffset = CGPoint(x: 0, y: -50)
     private let modeOffset = CGPoint(x: 0, y: 0)
     private let switchCamOffset = CGPoint(x: 100, y: -70)
@@ -99,7 +99,7 @@ struct CameraOverlay: View {
                 isDepthMode: framePipeline.isDepthModeActive,
                 isFrontCamera: cameraManager.isFrontCamera
             )
-            .frame(width: 250, height: 44)
+            .frame(width: 272, height: 40)
             .offset(x: zoomBarOffset.x, y: zoomBarOffset.y)
 
             CaptureControls(
