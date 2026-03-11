@@ -3,6 +3,7 @@ import SwiftUI
 struct CapturePreviewView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject var viewModel: CapturePreviewViewModel
+    @State private var showSavedToast = false
     
     var body: some View {
         ZStack {
@@ -16,9 +17,28 @@ struct CapturePreviewView: View {
                 quickShareBar
             }
             .padding()
+            
+            // MARK: - Saved! toast
+            if showSavedToast {
+                savedToast
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
+                    .zIndex(100)
+            }
         }
         .onAppear {
             viewModel.onAppear()
+        }
+        .onChange(of: viewModel.saveState) { _, newState in
+            if newState == .saved {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    showSavedToast = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        showSavedToast = false
+                    }
+                }
+            }
         }
         .sheet(isPresented: $viewModel.isShowingShareSheet) {
             ActivityView(activityItems: viewModel.shareItems)
@@ -126,5 +146,20 @@ struct CapturePreviewView: View {
         case .failed:
             return "Retry Save"
         }
+    }
+    
+    // MARK: - Liquid Glass Toast
+    
+    private var savedToast: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.green)
+            Text("Saved!")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .glassPanel(cornerRadius: 20, padding: 14)
+        .allowsHitTesting(false)
     }
 }

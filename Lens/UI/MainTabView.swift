@@ -25,9 +25,9 @@ struct MediaHubTabView: View {
   }
 
   static var defaultTabs: [TabItem] = [
-    .init(
-      id: .recordings, title: NSLocalizedString("Recordings", comment: ""),
-      systemImage: "rectangle.stack", isEnabled: true),
+//    .init(
+//      id: .recordings, title: NSLocalizedString("Recordings", comment: ""),
+//      systemImage: "rectangle.stack", isEnabled: true),
     .init(
       id: .effects, title: NSLocalizedString("Effects", comment: ""),
       systemImage: "wand.and.stars", isEnabled: true),
@@ -39,7 +39,7 @@ struct MediaHubTabView: View {
   ]
 
   var tabs: [TabItem] = Self.defaultTabs
-  @State private var selectedTab: TabID = .recordings
+  @State private var selectedTab: TabID = .effects
 
   var body: some View {
     let enabled = tabs.filter { $0.isEnabled }
