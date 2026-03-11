@@ -65,6 +65,7 @@ private struct CaptureCell: View {
         .font(DesignSystem.Fonts.regular12)
         .foregroundStyle(DesignSystem.Colors.textPrimary.opacity(0.65))
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
   }
 

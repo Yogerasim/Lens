@@ -56,7 +56,7 @@ struct CameraOverlay: View {
                 }
             }
 
-            .sheet(isPresented: $isMediaHubPresented) {
+            .fullScreenCover(isPresented: $isMediaHubPresented) {
                 MediaHubTabView(
                     onClose: {
                         isMediaHubPresented = false
@@ -71,7 +71,7 @@ struct CameraOverlay: View {
                 )
             }
 
-            .sheet(isPresented: $isLegacyHubPresented) {
+            .fullScreenCover(isPresented: $isLegacyHubPresented) {
                 LegacyMediaHubTabView(
                     onClose: { isLegacyHubPresented = false },
                     onSelectEffect: { filter in
@@ -80,7 +80,7 @@ struct CameraOverlay: View {
                 )
             }
 
-            .sheet(isPresented: $isDemoPresented) {
+            .fullScreenCover(isPresented: $isDemoPresented) {
                 ShaderDemoControls()
             }
     }

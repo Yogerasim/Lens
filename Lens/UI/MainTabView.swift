@@ -26,19 +26,20 @@ struct MediaHubTabView: View {
 
   static var defaultTabs: [TabItem] = [
     .init(
-      id: .effects, title: NSLocalizedString("tab_effects", comment: ""),
-      systemImage: "wand.and.stars", isEnabled: true),
-    .init(
-      id: .voice, title: NSLocalizedString("tab_voice", comment: ""), systemImage: "mic.fill",
-      isEnabled: true),
-    .init(
-      id: .recordings, title: NSLocalizedString("tab_recordings", comment: ""),
+      id: .recordings, title: NSLocalizedString("Recordings", comment: ""),
       systemImage: "rectangle.stack", isEnabled: true),
-    .init(id: .demo, title: "Demo", systemImage: "shuffle", isEnabled: true),
+    .init(
+      id: .effects, title: NSLocalizedString("Effects", comment: ""),
+      systemImage: "wand.and.stars", isEnabled: true),
+    .init(id: .demo, title: "Settings", systemImage: "shuffle", isEnabled: true),
+    
+//    .init(
+//      id: .voice, title: NSLocalizedString("tab_voice", comment: ""), systemImage: "mic.fill",
+//      isEnabled: true),
   ]
 
   var tabs: [TabItem] = Self.defaultTabs
-  @State private var selectedTab: TabID = .effects
+  @State private var selectedTab: TabID = .recordings
 
   var body: some View {
     let enabled = tabs.filter { $0.isEnabled }
@@ -91,19 +92,19 @@ struct MediaHubTabView: View {
           onSelectEffect(filter)
           onClose?()
         }
-        .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_effects", comment: "")) }
+        .toolbar { closeAndTitleToolbar(title: NSLocalizedString("Effects", comment: "")) }
       }
 
     case .recordings:
       NavigationStack {
         RecordingsView()
-          .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_recordings", comment: "")) }
+          .toolbar { closeAndTitleToolbar(title: NSLocalizedString("Recordings", comment: "")) }
       }
 
     case .demo:
       NavigationStack {
         ShaderDemoControls()
-          .toolbar { closeAndTitleToolbar(title: "Demo") }
+          .toolbar { closeAndTitleToolbar(title: "Settings") }
       }
     }
   }
