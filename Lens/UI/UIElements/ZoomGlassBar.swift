@@ -65,7 +65,7 @@ struct ZoomGlassBar: View {
             HStack(spacing: 0) {
                 ForEach(presets) { preset in
                     Button {
-                        DebugLog.zoom("ZoomGlassBar preset tap factor=\(preset.factor)")
+                        print("ZOOM BAR TAP preset=\(preset.factor)")
                         cameraManager.jumpToPreset(logical: preset.factor)
                     } label: {
                         Text(preset.label)
@@ -117,7 +117,7 @@ struct ZoomGlassBar: View {
                             let localX = clamp(value.location.x - sideInset, 0, trackWidth)
                             let targetZoom = zoomValue(for: localX, width: trackWidth)
 
-                            DebugLog.zoom("ZoomGlassBar drag ended x=\(localX) target=\(targetZoom)")
+                            print("ZOOM BAR DRAG ENDED target=\(targetZoom)")
                             cameraManager.zoomGestureEnded(targetLogicalZoom: targetZoom)
                             isDragging = false
                         }

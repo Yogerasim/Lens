@@ -68,6 +68,11 @@ final class CameraManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+
+        DebugLog.isEnabled = true
+        DebugLog.zoomEnabled = true
+        DebugLog.cameraEnabled = true
+
         UserDefaults.standard.register(defaults: ["zoom_usePhysicalLenses": true])
         zoomController.manager = self
         zoomController.capabilities = backCapabilities
@@ -115,6 +120,8 @@ final class CameraManager: NSObject, ObservableObject {
     }
 
     private func requestAudioPermissionAndStart() {
+        AppAudioSessionController.shared.configureForCameraCapture()
+
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             sessionController.startSession { [weak self] device in
@@ -122,6 +129,7 @@ final class CameraManager: NSObject, ObservableObject {
             }
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { _ in
+                AppAudioSessionController.shared.configureForCameraCapture()
                 self.sessionController.startSession { [weak self] device in
                     self?.updateZoomLimits(for: device)
                 }
@@ -301,14 +309,17 @@ extension CameraManager {
     }
 
     private func zoomContext(currentDevice: AVCaptureDevice? = nil) -> CameraZoomControllerContext {
-        CameraZoomControllerContext(
+        let activeDevice = currentDevice ?? sessionController.currentInput?.device
+
+        return CameraZoomControllerContext(
             currentPosition: currentPosition,
             isDepthEnabled: isDepthEnabled,
             isRecording: FramePipeline.shared.isRecording,
             currentBackDeviceType: currentBackDeviceType,
             currentCapabilities: currentCapabilities,
             backCapabilities: backCapabilities,
-            currentDeviceMaxZoomFactor: currentDevice?.activeFormat.videoMaxZoomFactor ?? sessionController.currentInput?.device.activeFormat.videoMaxZoomFactor ?? maxZoomFactor
+            currentDeviceMaxZoomFactor: activeDevice?.activeFormat.videoMaxZoomFactor ?? maxZoomFactor,
+            activeDevice: activeDevice
         )
     }
 
@@ -317,19 +328,27 @@ extension CameraManager {
     }
 
     private func setDeviceZoomSafe(_ deviceZoom: CGFloat, on device: AVCaptureDevice? = nil) {
-        guard let targetDevice = device ?? sessionController.currentInput?.device else { return }
+        guard let targetDevice = device ?? sessionController.currentInput?.device else {
+            DebugLog.zoom("setDeviceZoomSafe skipped: no device")
+            return
+        }
+
         let hwMax = targetDevice.activeFormat.videoMaxZoomFactor
         let clamped = max(1.0, min(deviceZoom, hwMax))
+
+        DebugLog.zoom("setDeviceZoomSafe device=\(targetDevice.deviceType.rawValue) requested=\(deviceZoom) clamped=\(clamped) hwMax=\(hwMax) depth=\(isDepthEnabled)")
 
         do {
             try targetDevice.lockForConfiguration()
             targetDevice.videoZoomFactor = clamped
+            let applied = targetDevice.videoZoomFactor
             targetDevice.unlockForConfiguration()
+
+            DebugLog.zoom("setDeviceZoomSafe applied=\(applied)")
         } catch {
             DebugLog.error("Zoom error: \(error)")
         }
     }
-
     private func updateLogicalZoom(_ logical: CGFloat) {
         DispatchQueue.main.async {
             self.currentZoomFactor = logical
@@ -337,6 +356,8 @@ extension CameraManager {
     }
 
     private func applyDigitalZoomOnly(logical: CGFloat, publishLogical: Bool) {
+        DebugLog.zoom("CameraManager applyDigitalZoomOnly logical=\(logical) publish=\(publishLogical) depth=\(isDepthEnabled) currentZoom=\(currentZoomFactor) active=\(sessionController.currentInput?.device.deviceType.rawValue ?? "nil")")
+
         guard let publishedLogical = zoomController.applyDigitalZoomOnly(
             requestedLogical: logical,
             context: zoomContext(),
@@ -344,7 +365,10 @@ extension CameraManager {
             setDeviceZoom: { [weak self] zoom, device in
                 self?.setDeviceZoomSafe(zoom, on: device)
             }
-        ) else { return }
+        ) else {
+            DebugLog.zoom("CameraManager applyDigitalZoomOnly failed: no publishedLogical")
+            return
+        }
 
         updateLogicalZoom(publishedLogical)
     }

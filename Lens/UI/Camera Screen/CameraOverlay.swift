@@ -13,6 +13,12 @@ struct CameraOverlay: View {
     private let modeOffset = CGPoint(x: 0, y: 0)
     private let switchCamOffset = CGPoint(x: 100, y: -70)
     private let effectsOffset = CGPoint(x: -100, y: -70)
+    
+    private var dynamicFiltersOffset: CGPoint {
+        framePipeline.isDepthModeActive
+            ? CGPoint(x: 0, y: -142)
+            : filtersOffset
+    }
 
     @ObservedObject var cameraManager: CameraManager
     @ObservedObject var shaderManager: ShaderManager
@@ -92,15 +98,20 @@ struct CameraOverlay: View {
     private var bottomBlock: some View {
         ZStack {
             ShaderIndicatorRow(shaderManager: shaderManager)
-                .offset(x: filtersOffset.x, y: filtersOffset.y)
+                .offset(x: dynamicFiltersOffset.x, y: dynamicFiltersOffset.y)
+                .animation(.easeInOut(duration: 0.22), value: framePipeline.isDepthModeActive)
 
-            ZoomGlassBar(
-                cameraManager: cameraManager,
-                isDepthMode: framePipeline.isDepthModeActive,
-                isFrontCamera: cameraManager.isFrontCamera
-            )
-            .frame(width: 272, height: 40)
-            .offset(x: zoomBarOffset.x, y: zoomBarOffset.y)
+            if !framePipeline.isDepthModeActive {
+                ZoomGlassBar(
+                    cameraManager: cameraManager,
+                    isDepthMode: framePipeline.isDepthModeActive,
+                    isFrontCamera: cameraManager.isFrontCamera
+                )
+                .frame(width: 272, height: 40)
+                .offset(x: zoomBarOffset.x, y: zoomBarOffset.y)
+                .zIndex(50)
+                .allowsHitTesting(true)
+            }
 
             CaptureControls(
                 cameraManager: cameraManager,

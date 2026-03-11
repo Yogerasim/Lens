@@ -11,6 +11,7 @@ struct CameraZoomControllerContext {
     let currentCapabilities: CameraCapabilities
     let backCapabilities: CameraCapabilities
     let currentDeviceMaxZoomFactor: CGFloat
+    let activeDevice: AVCaptureDevice?
 }
 
 final class CameraZoomController {
@@ -259,6 +260,10 @@ final class CameraZoomController {
     }
 
     private func contextDevice(context: CameraZoomControllerContext) -> AVCaptureDevice? {
+        if let activeDevice = context.activeDevice {
+            return activeDevice
+        }
+
         if context.currentPosition == .front {
             return context.currentCapabilities.wideDevice ?? context.currentCapabilities.devices.first
         }
