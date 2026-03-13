@@ -4,8 +4,8 @@ import Photos
 import UIKit
 
 enum CaptureMode: String, CaseIterable {
-    case photo = "ФОТО"
-    case video = "ВИДЕО"
+    case photo = "PHOTO"
+    case video = "VIDEO"
 }
 
 final class MediaRecorder: NSObject, ObservableObject {

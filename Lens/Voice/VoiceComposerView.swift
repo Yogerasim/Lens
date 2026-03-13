@@ -55,40 +55,26 @@ struct VoiceComposerView: View {
   ]
 
   var body: some View {
-    NavigationView {
-      ZStack {
+    ZStack {
 
-        Color.black.ignoresSafeArea()
+      Color.black.ignoresSafeArea()
 
-        VStack(spacing: 20) {
+      VStack(spacing: 20) {
 
-          statusIndicator
+        statusIndicator
 
-          textEditor
+        textEditor
 
-          exampleChips
+        exampleChips
 
-          controlButtons
+        controlButtons
 
-          helpSection
+        helpSection
 
-          Spacer()
-        }
-        .padding()
+        Spacer()
       }
-      .navigationTitle("Voice Composer")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Закрыть") {
-            speechService.stop()
-            dismiss()
-          }
-          .foregroundColor(.white)
-        }
-      }
+      .padding()
     }
-    .preferredColorScheme(.dark)
     .alert("Требуется разрешение", isPresented: $showPermissionAlert) {
       Button("Открыть настройки") {
         if let url = URL(string: UIApplication.openSettingsURLString) {

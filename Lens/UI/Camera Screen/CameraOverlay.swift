@@ -76,7 +76,11 @@ struct CameraOverlay: View {
                     onClose: { isLegacyHubPresented = false },
                     onSelectEffect: { filter in
                         shaderManager.selectShader(by: filter.shaderName)
-                    }
+                    },
+                    cameraManager: cameraManager,
+                    shaderManager: shaderManager,
+                    mediaRecorder: mediaRecorder,
+                    framePipeline: framePipeline
                 )
             }
 

@@ -39,7 +39,7 @@ struct MediaHubTabView: View {
   ]
 
   var tabs: [TabItem] = Self.defaultTabs
-  @State private var selectedTab: TabID = .effects
+  @State private var selectedTab: TabID = .recordings
 
   var body: some View {
     let enabled = tabs.filter { $0.isEnabled }
@@ -112,8 +112,10 @@ struct MediaHubTabView: View {
   @ToolbarContentBuilder
   private func closeAndTitleToolbar(title: String) -> some ToolbarContent {
     ToolbarItem(placement: .topBarLeading) {
-      Button(NSLocalizedString("close", comment: "")) { onClose?() }
-        .foregroundStyle(DesignSystem.Colors.textPrimary)
+      Button(action: { onClose?() }) {
+        Image(systemName: "xmark")
+      }
+      .foregroundStyle(DesignSystem.Colors.textPrimary)
     }
     ToolbarItem(placement: .principal) {
       NavigationTitleView(title: title)
@@ -124,10 +126,17 @@ struct MediaHubTabView: View {
 struct LegacyMediaHubTabView: View {
   var onClose: (() -> Void)? = nil
   var onSelectEffect: (FilterDefinition) -> Void
+  
+  // Dependencies for VoiceComposerView
+  var cameraManager: CameraManager
+  var shaderManager: ShaderManager
+  var mediaRecorder: MediaRecorder
+  var framePipeline: FramePipeline
 
   enum TabID: Int, CaseIterable, Hashable {
     case recordings
     case effects
+    case voice
   }
 
   struct TabItem: Identifiable, Hashable {
@@ -140,14 +149,17 @@ struct LegacyMediaHubTabView: View {
   static var defaultTabs: [TabItem] = [
     .init(
       id: .recordings, title: NSLocalizedString("tab_recordings", comment: ""),
-      systemImage: "rectangle.stack", isEnabled: true),
+      systemImage: "rectangle.stack", isEnabled: false),
     .init(
       id: .effects, title: NSLocalizedString("tab_effects", comment: ""),
       systemImage: "wand.and.stars", isEnabled: true),
+    .init(
+      id: .voice, title: NSLocalizedString("tab_voice", comment: ""),
+      systemImage: "mic.fill", isEnabled: true),
   ]
 
   var tabs: [TabItem] = Self.defaultTabs
-  @State private var selectedTab: TabID = .recordings
+  @State private var selectedTab: TabID = .effects
 
   var body: some View {
     let enabled = tabs.filter { $0.isEnabled }
@@ -197,14 +209,30 @@ struct LegacyMediaHubTabView: View {
         }
         .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_effects", comment: "")) }
       }
+      
+    case .voice:
+      NavigationStack {
+        VoiceComposerView(
+          cameraManager: cameraManager,
+          shaderManager: shaderManager,
+          mediaRecorder: mediaRecorder,
+          framePipeline: framePipeline
+        )
+        .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_voice", comment: "")) }
+      }
     }
   }
 
   @ToolbarContentBuilder
   private func closeAndTitleToolbar(title: String) -> some ToolbarContent {
     ToolbarItem(placement: .topBarLeading) {
-      Button(NSLocalizedString("close", comment: "")) { onClose?() }
-        .foregroundStyle(DesignSystem.Colors.textPrimary)
+      Button {
+        onClose?()
+      } label: {
+        Image(systemName: "xmark")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(DesignSystem.Colors.textPrimary)
+      }
     }
     ToolbarItem(placement: .principal) {
       NavigationTitleView(title: title)
