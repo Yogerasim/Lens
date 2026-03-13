@@ -20,8 +20,11 @@ final class CameraSessionController: NSObject {
   override init() {
     super.init()
 
+    // Отключаем автоматическую настройку аудио сессии AVCaptureSession,
+    // чтобы музыка в наушниках продолжала играть
+    session.automaticallyConfiguresApplicationAudioSession = false
+    
     if #available(iOS 18.0, *) {
-      session.automaticallyConfiguresApplicationAudioSession = true
       session.configuresApplicationAudioSessionToMixWithOthers = true
     }
   }

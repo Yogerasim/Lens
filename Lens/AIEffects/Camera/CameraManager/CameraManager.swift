@@ -143,6 +143,7 @@ final class CameraManager: NSObject, ObservableObject {
 
     func stop() {
         sessionController.stopSession()
+        AppAudioSessionController.shared.deactivate()
     }
 
     func enableDepth() {
