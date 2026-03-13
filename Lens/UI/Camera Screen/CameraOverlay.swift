@@ -13,6 +13,8 @@ struct CameraOverlay: View {
     private let modeOffset = CGPoint(x: 0, y: 0)
     private let switchCamOffset = CGPoint(x: 100, y: -70)
     private let effectsOffset = CGPoint(x: -100, y: -70)
+
+    private let showsFPS = false
     
     private var dynamicFiltersOffset: CGPoint {
         framePipeline.isDepthModeActive
@@ -93,7 +95,8 @@ struct CameraOverlay: View {
         CameraTopBar(
             shaderManager: shaderManager,
             mediaRecorder: mediaRecorder,
-            fps: fps
+            fps: fps,
+            showsFPS: showsFPS
         )
         .offset(x: fpsOffset.x, y: fpsOffset.y)
         .padding(.top, 8)

@@ -6,25 +6,27 @@ struct CameraTopBar: View {
   @ObservedObject var mediaRecorder: MediaRecorder
   @ObservedObject var fps: FPSCounter
 
+  let showsFPS: Bool
+
   var body: some View {
     HStack {
-
-      VStack(alignment: .leading, spacing: 4) {
+      HStack {
         Text(shaderManager.currentDisplayName.uppercased())
           .font(.caption.bold())
 
-        if mediaRecorder.isRecording {
-
-          VStack(alignment: .leading, spacing: 2) {
-            Text("CAM: \(fps.fps) FPS")
-              .font(.system(.caption2, design: .monospaced))
-            Text("REC: \(fps.recordingFPS) FPS")
-              .font(.system(.caption2, design: .monospaced))
-              .foregroundColor(fps.recordingFPS > 0 ? .green : .red)
+        if showsFPS {
+          if mediaRecorder.isRecording {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("CAM: \(fps.fps) FPS")
+                .font(.system(.caption2, design: .monospaced))
+              Text("REC: \(fps.recordingFPS) FPS")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(fps.recordingFPS > 0 ? .green : .red)
+            }
+          } else {
+            Text("FPS: \(fps.fps)")
+              .font(.system(.body, design: .monospaced))
           }
-        } else {
-          Text("FPS: \(fps.fps)")
-            .font(.system(.body, design: .monospaced))
         }
       }
       .foregroundColor(.white)

@@ -11,14 +11,15 @@ struct CapturePreviewView: View {
             
             previewContent
             
-            VStack {
+            VStack(spacing: 0) {
                 topBar
                 Spacer()
-                quickShareBar
+//                quickShareBar
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
             
-            // MARK: - Saved! toast
             if showSavedToast {
                 savedToast
                     .transition(.scale(scale: 0.7).combined(with: .opacity))
@@ -33,6 +34,7 @@ struct CapturePreviewView: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                     showSavedToast = true
                 }
+                
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                     withAnimation(.easeOut(duration: 0.25)) {
                         showSavedToast = false
@@ -61,25 +63,25 @@ struct CapturePreviewView: View {
     private var previewContent: some View {
         switch viewModel.media.type {
         case .photo:
-            PhotoPreviewView(image: viewModel.media.previewImage ?? UIImage(contentsOfFile: viewModel.media.fileURL.path))
+            PhotoPreviewView(
+                image: viewModel.media.previewImage
+                    ?? UIImage(contentsOfFile: viewModel.media.fileURL.path)
+            )
         case .video:
             VideoPreviewPlayerView(url: viewModel.media.fileURL)
+                .ignoresSafeArea()
         }
     }
     
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 12) {
             Button {
                 viewModel.closeAndDeleteTemporaryMedia()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.12))
-                    .clipShape(Circle())
             }
+            .glassPanel(cornerRadius: 18, padding: 10)
             
             Spacer()
             
@@ -88,51 +90,89 @@ struct CapturePreviewView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.down.to.line")
+                        .font(.system(size: 15, weight: .semibold))
                     Text(saveButtonTitle)
+                        .font(.system(.body, design: .default).weight(.semibold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .frame(height: 44)
-                .background(Color.white.opacity(0.12))
-                .clipShape(Capsule())
             }
+            .glassPanel(cornerRadius: 18, padding: 12)
             
             Button {
                 viewModel.share()
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
                     Text("Share")
+                        .font(.system(.body, design: .default).weight(.semibold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .frame(height: 44)
-                .background(Color.white.opacity(0.12))
-                .clipShape(Capsule())
             }
+            .glassPanel(cornerRadius: 18, padding: 12)
         }
     }
     
     private var quickShareBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                ShareDestinationButton(title: "Instagram", systemImage: "camera") {
+                shareButton(
+                    title: "Instagram",
+                    systemImage: "camera"
+                ) {
                     viewModel.share()
                 }
-                ShareDestinationButton(title: "TikTok", systemImage: "music.note") {
+                
+                shareButton(
+                    title: "TikTok",
+                    systemImage: "music.note"
+                ) {
                     viewModel.share()
                 }
-                ShareDestinationButton(title: "Telegram", systemImage: "paperplane") {
+                
+                shareButton(
+                    title: "Telegram",
+                    systemImage: "paperplane"
+                ) {
                     viewModel.share()
                 }
-                ShareDestinationButton(title: "YouTube", systemImage: "play.rectangle") {
+                
+                shareButton(
+                    title: "YouTube",
+                    systemImage: "play.rectangle"
+                ) {
                     viewModel.share()
                 }
-                ShareDestinationButton(title: "More", systemImage: "ellipsis") {
+                
+                shareButton(
+                    title: "More",
+                    systemImage: "ellipsis"
+                ) {
                     viewModel.share()
                 }
             }
+            .padding(.top, 12)
         }
+    }
+    
+    private func shareButton(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundColor(.white)
+            .frame(width: 84, height: 84)
+        }
+        .glassPanel(cornerRadius: 20, padding: 12)
     }
     
     private var saveButtonTitle: String {
@@ -148,13 +188,12 @@ struct CapturePreviewView: View {
         }
     }
     
-    // MARK: - Liquid Glass Toast
-    
     private var savedToast: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.green)
+            
             Text("Saved!")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white)
@@ -162,4 +201,35 @@ struct CapturePreviewView: View {
         .glassPanel(cornerRadius: 20, padding: 14)
         .allowsHitTesting(false)
     }
+}
+#Preview("Photo") {
+    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("preview-photo.jpg")
+    
+    let image = UIImage(systemName: "photo")!
+    let data = image.jpegData(compressionQuality: 1.0) ?? Data()
+    try? data.write(to: tempURL)
+    
+    let media = CapturedMedia(
+        type: .photo,
+        fileURL: tempURL,
+        previewImageData: data
+    )
+    
+    return CapturePreviewView(
+        viewModel: CapturePreviewViewModel(media: media)
+    )
+}
+
+#Preview("Video") {
+    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("preview-video.mp4")
+    
+    let media = CapturedMedia(
+        type: .video,
+        fileURL: tempURL,
+        previewImageData: nil
+    )
+    
+    return CapturePreviewView(
+        viewModel: CapturePreviewViewModel(media: media)
+    )
 }
