@@ -12,8 +12,7 @@ struct CameraCanvasView: View {
 
     @State private var intensityGestureStartValue: Float = 1.0
     @State private var isIntensityGestureActive: Bool = false
-    @State private var isIntensityHUDVisible: Bool = false
-    @State private var hideHUDWorkItem: DispatchWorkItem?
+    @State private var isIntensityHUDVisible: Bool = true  // Always visible
 
     @State private var isPinchActive: Bool = false
     @State private var lastMagnificationValue: CGFloat = 1.0
@@ -41,13 +40,13 @@ struct CameraCanvasView: View {
                 }
 
                 HStack {
+                    Spacer()
+                    
                     GlassIntensityHUD(
                         value: framePipeline.smoothedIntensity,
                         isVisible: isIntensityHUDVisible
                     )
-                    .padding(.leading, 16)
-
-                    Spacer()
+                    .padding(.trailing, 16)
                 }
             }
         }
@@ -125,8 +124,6 @@ struct CameraCanvasView: View {
                     intensityGestureStartValue = framePipeline.smoothedIntensity
                 }
 
-                showIntensityHUD()
-
                 let sensitivity: Float = 0.004
                 let deltaY = Float(value.translation.height)
                 let newIntensity = intensityGestureStartValue - deltaY * sensitivity
@@ -135,29 +132,6 @@ struct CameraCanvasView: View {
             }
             .onEnded { _ in
                 isIntensityGestureActive = false
-                scheduleHideHUD(delay: 0.8)
             }
-    }
-
-    private func showIntensityHUD() {
-        hideHUDWorkItem?.cancel()
-        hideHUDWorkItem = nil
-
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-            isIntensityHUDVisible = true
-        }
-    }
-
-    private func scheduleHideHUD(delay: TimeInterval) {
-        hideHUDWorkItem?.cancel()
-
-        let workItem = DispatchWorkItem { [self] in
-            withAnimation(.easeOut(duration: 0.25)) {
-                isIntensityHUDVisible = false
-            }
-        }
-
-        hideHUDWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 }

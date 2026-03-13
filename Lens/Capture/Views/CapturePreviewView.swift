@@ -14,7 +14,7 @@ struct CapturePreviewView: View {
             VStack(spacing: 0) {
                 topBar
                 Spacer()
-//                quickShareBar
+                // quickShareBar
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
@@ -74,80 +74,83 @@ struct CapturePreviewView: View {
     }
     
     private var topBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
                 viewModel.closeAndDeleteTemporaryMedia()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 18, height: 18)
+                    .padding(10)
+                    .contentShape(Rectangle())
             }
-            .glassPanel(cornerRadius: 18, padding: 10)
+            .buttonStyle(.plain)
+            .glassPanel(cornerRadius: 18, padding: 0)
             
             Spacer()
             
-            Button {
+            smallActionButton(
+                title: saveButtonTitle,
+                systemImage: "arrow.down.to.line"
+            ) {
                 viewModel.saveToGallery()
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(saveButtonTitle)
-                        .font(.system(.body, design: .default).weight(.semibold))
-                }
-                .foregroundColor(.white)
             }
-            .glassPanel(cornerRadius: 18, padding: 12)
             
-            Button {
+            smallActionButton(
+                title: "Share",
+                systemImage: "square.and.arrow.up"
+            ) {
                 viewModel.share()
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("Share")
-                        .font(.system(.body, design: .default).weight(.semibold))
-                }
-                .foregroundColor(.white)
             }
-            .glassPanel(cornerRadius: 18, padding: 12)
         }
+    }
+    
+    private func smallActionButton(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 38)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .glassPanel(cornerRadius: 18, padding: 0)
     }
     
     private var quickShareBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                shareButton(
-                    title: "Instagram",
-                    systemImage: "camera"
-                ) {
+            HStack(spacing: 10) {
+                shareButton(title: "Instagram", systemImage: "camera") {
                     viewModel.share()
                 }
                 
-                shareButton(
-                    title: "TikTok",
-                    systemImage: "music.note"
-                ) {
+                shareButton(title: "TikTok", systemImage: "music.note") {
                     viewModel.share()
                 }
                 
-                shareButton(
-                    title: "Telegram",
-                    systemImage: "paperplane"
-                ) {
+                shareButton(title: "Telegram", systemImage: "paperplane") {
                     viewModel.share()
                 }
                 
-                shareButton(
-                    title: "YouTube",
-                    systemImage: "play.rectangle"
-                ) {
+                shareButton(title: "YouTube", systemImage: "play.rectangle") {
                     viewModel.share()
                 }
                 
-                shareButton(
-                    title: "More",
-                    systemImage: "ellipsis"
-                ) {
+                shareButton(title: "More", systemImage: "ellipsis") {
                     viewModel.share()
                 }
             }
@@ -161,18 +164,21 @@ struct CapturePreviewView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
                 
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
                     .lineLimit(1)
             }
-            .foregroundColor(.white)
-            .frame(width: 84, height: 84)
+            .frame(width: 68, height: 68)
+            .contentShape(Rectangle())
         }
-        .glassPanel(cornerRadius: 20, padding: 12)
+        .buttonStyle(.plain)
+        .glassPanel(cornerRadius: 18, padding: 0)
     }
     
     private var saveButtonTitle: String {
@@ -202,6 +208,7 @@ struct CapturePreviewView: View {
         .allowsHitTesting(false)
     }
 }
+
 #Preview("Photo") {
     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("preview-photo.jpg")
     
