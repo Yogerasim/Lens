@@ -13,6 +13,8 @@ struct EffectCardView: View {
   let category: EffectCardCategory?
   var nodeCount: Int? = nil
 
+  private let cardCornerRadius: CGFloat = 16
+  private let previewCornerRadius: CGFloat = 14
   private let previewHeight: CGFloat = 92
 
   var body: some View {
@@ -22,17 +24,17 @@ struct EffectCardView: View {
     }
     .background(cardBackground)
     .overlay(cardStroke)
-    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+    .contentShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
   }
 
   private var cardBackground: some View {
-    RoundedRectangle(cornerRadius: 16, style: .continuous)
+    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
       .fill(DesignSystem.Colors.lightGray.opacity(0.12))
   }
 
   private var cardStroke: some View {
-    RoundedRectangle(cornerRadius: 16, style: .continuous)
+    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
       .stroke(
         isSelected
           ? DesignSystem.Colors.blueUniversal.opacity(0.9)
@@ -42,30 +44,43 @@ struct EffectCardView: View {
   }
 
   private var previewBlock: some View {
-    RoundedRectangle(cornerRadius: 14, style: .continuous)
-      .fill(DesignSystem.Colors.lightGray.opacity(0.18))
-      .frame(height: previewHeight)
-      .overlay(previewContent)
-      .overlay(alignment: .topLeading) {
-        topLeftBadge.padding(7)
-      }
-      .overlay(alignment: .topTrailing) {
-        topRightBadges.padding(7)
-      }
-      .overlay(alignment: .bottomLeading) {
-        bottomLeftBadges.padding(7)
+    ZStack {
+      RoundedRectangle(cornerRadius: previewCornerRadius, style: .continuous)
+        .fill(DesignSystem.Colors.lightGray.opacity(0.18))
+
+      previewContent
+        .clipShape(RoundedRectangle(cornerRadius: previewCornerRadius, style: .continuous))
+
+      VStack {
+        HStack {
+          topLeftBadge
+          Spacer()
+          topRightBadges
+        }
+
+        Spacer()
+
+        HStack {
+          bottomLeftBadges
+          Spacer()
+        }
       }
       .padding(7)
+    }
+    .frame(height: previewHeight)
+    .padding(7)
   }
 
   @ViewBuilder
   private var previewContent: some View {
     if let previewImageName {
-      Image(previewImageName)
-        .resizable()
-        .scaledToFill()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
+      GeometryReader { geometry in
+        Image(previewImageName)
+          .resizable()
+          .scaledToFill()
+          .frame(width: geometry.size.width, height: geometry.size.height)
+          .clipped()
+      }
     } else {
       fallbackPreview
     }
@@ -196,6 +211,7 @@ struct EffectCardView: View {
     .clipShape(Capsule())
   }
 }
+
 #Preview("Compact 3-column cards") {
   ScrollView {
     LazyVGrid(
@@ -209,39 +225,39 @@ struct EffectCardView: View {
       EffectCardView(
         title: "Comic",
         subtitle: "Outline",
-        previewImageName: nil,
+        previewImageName: "comic",
         systemImageName: "paintbrush.fill",
         isSelected: true,
         needsDepth: false,
         supportsIntensity: true,
         isPremium: false,
-        isUnlocked: false,
+        isUnlocked: true,
         category: .outline
       )
 
       EffectCardView(
         title: "Depth Solid",
         subtitle: "Depth-based",
-        previewImageName: nil,
+        previewImageName: "depthSolid",
         systemImageName: "cube.transparent",
         isSelected: false,
         needsDepth: true,
         supportsIntensity: true,
         isPremium: false,
-        isUnlocked: false,
+        isUnlocked: true,
         category: .depth
       )
 
       EffectCardView(
         title: "Kaleidoscope Pro",
         subtitle: "Premium",
-        previewImageName: nil,
+        previewImageName: "kaleidoscope",
         systemImageName: "hexagon.grid.fill",
         isSelected: false,
         needsDepth: false,
         supportsIntensity: true,
         isPremium: true,
-        isUnlocked: true,
+        isUnlocked: false,
         category: .pro
       )
 
@@ -254,7 +270,7 @@ struct EffectCardView: View {
         needsDepth: false,
         supportsIntensity: true,
         isPremium: false,
-        isUnlocked: false,
+        isUnlocked: true,
         category: .myEffects,
         nodeCount: 6
       )

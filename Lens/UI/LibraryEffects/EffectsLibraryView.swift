@@ -151,9 +151,6 @@ struct EffectsLibraryView: View {
       return true
     }
 
-    // Затычка под будущую покупку:
-    // false = замок показывается
-    // true = замок скрыт
     return true
   }
 
@@ -210,5 +207,12 @@ struct EffectsLibraryView: View {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .fill(DesignSystem.Colors.lightGray.opacity(0.12))
     )
+  }
+}
+
+#Preview("Effects Library") {
+  NavigationStack {
+    EffectsLibraryView { _ in }
+      .background(DesignSystem.Colors.background)
   }
 }
