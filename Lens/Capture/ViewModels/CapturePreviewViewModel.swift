@@ -26,16 +26,26 @@ final class CapturePreviewViewModel: ObservableObject {
     
     init(
         media: CapturedMedia,
-        saveService: MediaSaveServiceProtocol = MediaSaveService(),
-        shareService: MediaShareServiceProtocol = MediaShareService(),
-        preparationService: MediaPreparationServiceProtocol = MediaPreparationService(),
-        storageService: CapturePreviewStorageServiceProtocol = CapturePreviewStorageService()
+        saveService: MediaSaveServiceProtocol,
+        shareService: MediaShareServiceProtocol,
+        preparationService: MediaPreparationServiceProtocol,
+        storageService: CapturePreviewStorageServiceProtocol
     ) {
         self.media = media
         self.saveService = saveService
         self.shareService = shareService
         self.preparationService = preparationService
         self.storageService = storageService
+    }
+    
+    convenience init(media: CapturedMedia) {
+        self.init(
+            media: media,
+            saveService: MediaSaveService(),
+            shareService: MediaShareService(),
+            preparationService: MediaPreparationService(),
+            storageService: CapturePreviewStorageService()
+        )
     }
     
     func onAppear() {

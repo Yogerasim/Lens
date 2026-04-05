@@ -125,6 +125,252 @@ enum ShaderRegistry {
     .init(
       id: "solidMono", displayName: "Solid Mono", fragment: "fragment_solidmono",
       icon: "circle.lefthalf.filled", needsDepth: false, supportsIntensity: true, family: .nonDepth),
+    .init(
+      id: "negativeOutline",
+      displayName: "Negative Outline",
+      fragment: "fragment_negativeoutline",
+      icon: "moon.stars.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+
+    .init(
+      id: "sepiaInk",
+      displayName: "Sepia Ink",
+      fragment: "fragment_sepiaink",
+      icon: "pencil.and.outline",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+
+    .init(
+      id: "mangaBW",
+      displayName: "Manga BW",
+      fragment: "fragment_mangabw",
+      icon: "circle.grid.cross.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+
+    .init(
+      id: "xeroxPunk",
+      displayName: "Xerox Punk",
+      fragment: "fragment_xeroxpunk",
+      icon: "doc.richtext.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+    
+        .init(
+          id: "classicNegative",
+          displayName: "Classic Negative",
+          fragment: "fragment_classicnegative",
+          icon: "circle.righthalf.pattern.checkered",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+
+        .init(
+          id: "infraredBloom",
+          displayName: "Infrared Bloom",
+          fragment: "fragment_infraredbloom",
+          icon: "camera.aperture",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+
+        .init(
+          id: "posterBurn",
+          displayName: "Poster Burn",
+          fragment: "fragment_posterburn",
+          icon: "flame.circle.fill",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+
+        .init(
+          id: "whitePencil",
+          displayName: "White Pencil",
+          fragment: "fragment_whitepencil",
+          icon: "pencil.tip.crop.circle",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+
+        .init(
+          id: "chromeGhost",
+          displayName: "Chrome Ghost",
+          fragment: "fragment_chromeghost",
+          icon: "sparkles.rectangle.stack.fill",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+
+        .init(
+          id: "thermalComic",
+          displayName: "Thermal Comic",
+          fragment: "fragment_thermalcomic",
+          icon: "thermometer.sun.fill",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+
+        .init(
+          id: "xrayPop",
+          displayName: "X-Ray Pop",
+          fragment: "fragment_xraypop",
+          icon: "eye.fill",
+          needsDepth: false,
+          supportsIntensity: true,
+          family: .nonDepth
+        ),
+    .init(
+      id: "posterBurnUltra",
+      displayName: "Poster Burn Ultra",
+      fragment: "fragment_posterburnultra",
+      icon: "sparkles.tv.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+//    .init(
+//      id: "crtGlass",
+//      displayName: "CRT Glass",
+//      fragment: "fragment_crtglass",
+//      icon: "tv.fill",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
+//    .init(
+//      id: "prismMelt",
+//      displayName: "Prism Melt",
+//      fragment: "fragment_prismmelt",
+//      icon: "diamond.fill",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
+//    .init(
+//      id: "holoFoil",
+//      displayName: "Holo Foil",
+//      fragment: "fragment_holofoil",
+//      icon: "sparkles",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
+    .init(
+      id: "newsprint",
+      displayName: "Newsprint",
+      fragment: "fragment_newsprint",
+      icon: "newspaper.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+    .init(
+      id: "signalLoss",
+      displayName: "Signal Loss",
+      fragment: "fragment_signalloss",
+      icon: "wifi.exclamationmark",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+//    .init(
+//      id: "nightOps",
+//      displayName: "Night Ops",
+//      fragment: "fragment_nightops",
+//      icon: "moon.fill",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
+//    .init(
+//      id: "pearlShift",
+//      displayName: "Pearl Shift",
+//      fragment: "fragment_pearlshift",
+//      icon: "sparkle.magnifyingglass",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
+    .init(
+      id: "blueprintInk",
+      displayName: "Blueprint Ink",
+      fragment: "fragment_blueprintink",
+      icon: "pencil.and.ruler.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+    .init(
+      id: "shineTunnel",
+      displayName: "Shine Tunnel",
+      fragment: "fragment_shinetunnel",
+      icon: "sparkles.tv.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+
+    .init(
+      id: "gyroidSerpent",
+      displayName: "Gyroid Serpent",
+      fragment: "fragment_gyroidserpent",
+      icon: "wave.3.right.circle.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+    .init(
+      id: "gyroidSerpentUltra",
+      displayName: "Gyroid Serpent Ultra",
+      fragment: "fragment_gyroidserpentultra",
+      icon: "wave.3.right.circle.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+
+    .init(
+      id: "shineTunnelOilSlick",
+      displayName: "Shine Tunnel Oil Slick",
+      fragment: "fragment_shinetunneloilslick",
+      icon: "sparkles.tv.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth
+    ),
+//    .init(
+//      id: "electricAura",
+//      displayName: "Electric Aura",
+//      fragment: "fragment_electricaura",
+//      icon: "bolt.fill",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
+//    .init(
+//      id: "mercury",
+//      displayName: "Mercury",
+//      fragment: "fragment_mercury",
+//      icon: "circle.hexagongrid.fill",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth
+//    ),
 
 //    .init(
 //      id: "matrix", displayName: "Matrix", fragment: "fragment_matrix",
