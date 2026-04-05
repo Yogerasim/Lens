@@ -10,6 +10,8 @@ struct MediaHubTabView: View {
   var mediaRecorder: MediaRecorder
   var framePipeline: FramePipeline
 
+  private let pauseReason = "media_hub"
+
   enum TabID: Int, CaseIterable, Hashable {
     case effects
     case voice
@@ -32,7 +34,7 @@ struct MediaHubTabView: View {
       id: .effects, title: NSLocalizedString("Effects", comment: ""),
       systemImage: "wand.and.stars", isEnabled: true),
     .init(id: .demo, title: "Settings", systemImage: "shuffle", isEnabled: true),
-    
+
 //    .init(
 //      id: .voice, title: NSLocalizedString("tab_voice", comment: ""), systemImage: "mic.fill",
 //      isEnabled: true),
@@ -56,17 +58,20 @@ struct MediaHubTabView: View {
     }
     .tint(DesignSystem.Colors.blueUniversal)
     .onAppear {
+      framePipeline.pauseRendering(reason: pauseReason)
+
       if !enabled.contains(where: { $0.id == selectedTab }),
-        let first = enabled.first?.id
-      {
+         let first = enabled.first?.id {
         selectedTab = first
       }
+    }
+    .onDisappear {
+      framePipeline.resumeRendering(reason: pauseReason)
     }
     .onChange(of: tabs) { _, _ in
       let enabledNow = tabs.filter { $0.isEnabled }
       if !enabledNow.contains(where: { $0.id == selectedTab }),
-        let first = enabledNow.first?.id
-      {
+         let first = enabledNow.first?.id {
         selectedTab = first
       }
     }
@@ -84,6 +89,7 @@ struct MediaHubTabView: View {
           mediaRecorder: mediaRecorder,
           framePipeline: framePipeline
         )
+        .toolbar { closeAndTitleToolbar(title: NSLocalizedString("Voice", comment: "")) }
       }
 
     case .effects:
@@ -117,6 +123,7 @@ struct MediaHubTabView: View {
       }
       .foregroundStyle(DesignSystem.Colors.textPrimary)
     }
+
     ToolbarItem(placement: .principal) {
       NavigationTitleView(title: title)
     }
@@ -126,12 +133,13 @@ struct MediaHubTabView: View {
 struct LegacyMediaHubTabView: View {
   var onClose: (() -> Void)? = nil
   var onSelectEffect: (FilterDefinition) -> Void
-  
-  // Dependencies for VoiceComposerView
+
   var cameraManager: CameraManager
   var shaderManager: ShaderManager
   var mediaRecorder: MediaRecorder
   var framePipeline: FramePipeline
+
+  private let pauseReason = "legacy_media_hub"
 
   enum TabID: Int, CaseIterable, Hashable {
     case recordings
@@ -176,17 +184,20 @@ struct LegacyMediaHubTabView: View {
     }
     .tint(DesignSystem.Colors.blueUniversal)
     .onAppear {
+      framePipeline.pauseRendering(reason: pauseReason)
+
       if !enabled.contains(where: { $0.id == selectedTab }),
-        let first = enabled.first?.id
-      {
+         let first = enabled.first?.id {
         selectedTab = first
       }
+    }
+    .onDisappear {
+      framePipeline.resumeRendering(reason: pauseReason)
     }
     .onChange(of: tabs) { _, _ in
       let enabledNow = tabs.filter { $0.isEnabled }
       if !enabledNow.contains(where: { $0.id == selectedTab }),
-        let first = enabledNow.first?.id
-      {
+         let first = enabledNow.first?.id {
         selectedTab = first
       }
     }
@@ -209,7 +220,7 @@ struct LegacyMediaHubTabView: View {
         }
         .toolbar { closeAndTitleToolbar(title: NSLocalizedString("tab_effects", comment: "")) }
       }
-      
+
     case .voice:
       NavigationStack {
         VoiceComposerView(
@@ -234,6 +245,7 @@ struct LegacyMediaHubTabView: View {
           .foregroundStyle(DesignSystem.Colors.textPrimary)
       }
     }
+
     ToolbarItem(placement: .principal) {
       NavigationTitleView(title: title)
     }

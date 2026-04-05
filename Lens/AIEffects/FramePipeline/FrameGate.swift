@@ -16,13 +16,14 @@ final class FrameGate {
 
   weak var consumer: FrameConsumer?
 
+  var isPausedProvider: (() -> Bool)?
+
   private let gateQueue = DispatchQueue(
     label: "frame.gate.queue",
     qos: .userInteractive
   )
 
   init(targetFPS: Double? = nil) {
-
     let fps = targetFPS ?? Double(DeviceCapabilities.current.maxFPS)
     self.targetFPS = fps
     self.minFrameInterval = CMTime(
@@ -33,6 +34,10 @@ final class FrameGate {
 
   func push(_ packet: FramePacket) {
     gateQueue.async {
+
+      if self.isPausedProvider?() == true {
+        return
+      }
 
       if self.isProcessing {
         return
@@ -54,6 +59,13 @@ final class FrameGate {
 
   func frameDidFinish() {
     gateQueue.async {
+      self.isProcessing = false
+    }
+  }
+
+  func resetTiming() {
+    gateQueue.async {
+      self.lastFrameTime = .zero
       self.isProcessing = false
     }
   }

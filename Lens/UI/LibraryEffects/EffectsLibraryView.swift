@@ -9,22 +9,16 @@ struct EffectsLibraryView: View {
   @ObservedObject private var shaderManager = ShaderManager.shared
 
   let onSelect: (FilterDefinition) -> Void
-    
-    private let columns = [
-      GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 10)
-    ]
 
-//  private let columns = [
-//    GridItem(.flexible(), spacing: 10),
-//    GridItem(.flexible(), spacing: 10),
-//    GridItem(.flexible(), spacing: 10)
-//  ]
+  private let columns = [
+    GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 10)
+  ]
 
   private let orderedSections: [EffectCardCategory] = [
+    .stylized,
     .pro,
     .depth,
     .outline,
-    .stylized
   ]
 
   private var availableFilters: [FilterDefinition] {
@@ -83,57 +77,84 @@ struct EffectsLibraryView: View {
   private func cardsGrid(_ filters: [FilterDefinition]) -> some View {
     LazyVGrid(columns: columns, spacing: 10) {
       ForEach(filters) { filter in
-        Button {
-          onSelect(filter)
-        } label: {
-          EffectCardView(
-            title: filter.name,
-            subtitle: subtitle(for: filter.category),
-            previewImageName: filter.previewImageName,
-            systemImageName: filter.iconName,
-            isSelected: shaderManager.currentFragment == filter.shaderName,
-            needsDepth: filter.needsDepth,
-            supportsIntensity: filter.supportsIntensity,
-            isPremium: filter.isPremium,
-            isLocked: filter.isPremium,
-            category: filter.category
-          )
-        }
-        .buttonStyle(.plain)
+        effectButton(for: filter)
       }
     }
+  }
+
+  @ViewBuilder
+  private func effectButton(for filter: FilterDefinition) -> some View {
+    let isSelected = shaderManager.currentFragment == filter.shaderName
+    let isUnlocked = premiumUnlockState(for: filter)
+
+    Button {
+      onSelect(filter)
+    } label: {
+      EffectCardView(
+        title: filter.name,
+        subtitle: subtitle(for: filter.category),
+        previewImageName: filter.previewImageName,
+        systemImageName: filter.iconName,
+        isSelected: isSelected,
+        needsDepth: filter.needsDepth,
+        supportsIntensity: filter.supportsIntensity,
+        isPremium: filter.isPremium,
+        isUnlocked: isUnlocked,
+        category: filter.category
+      )
+    }
+    .buttonStyle(.plain)
   }
 
   private var myEffectsGrid: some View {
     LazyVGrid(columns: columns, spacing: 10) {
       ForEach(graphStore.graphs) { graph in
-        Button {
-          selectCustomGraph(graph)
-        } label: {
-          EffectCardView(
-            title: graph.name,
-            subtitle: graph.mix.map { "\($0.effectA) + \($0.effectB)" } ?? "Custom graph",
-            previewImageName: nil,
-            systemImageName: "square.stack.3d.up.fill",
-            isSelected: graphSession.selectedGraphId == graph.id,
-            needsDepth: graph.needsDepth,
-            supportsIntensity: true,
-            isPremium: false,
-            isLocked: false,
-            category: .myEffects,
-            nodeCount: graph.nodes.count
-          )
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-          Button(role: .destructive) {
-            graphStore.remove(id: graph.id)
-          } label: {
-            Label("Delete", systemImage: "trash")
-          }
-        }
+        myEffectButton(for: graph)
       }
     }
+  }
+
+  @ViewBuilder
+  private func myEffectButton(for graph: EffectGraph) -> some View {
+    let subtitleText = graph.mix.map { "\($0.effectA) + \($0.effectB)" } ?? "Custom graph"
+    let isSelected = graphSession.selectedGraphId == graph.id
+
+    Button {
+      selectCustomGraph(graph)
+    } label: {
+      EffectCardView(
+        title: graph.name,
+        subtitle: subtitleText,
+        previewImageName: nil,
+        systemImageName: "square.stack.3d.up.fill",
+        isSelected: isSelected,
+        needsDepth: graph.needsDepth,
+        supportsIntensity: true,
+        isPremium: false,
+        isUnlocked: true,
+        category: .myEffects,
+        nodeCount: graph.nodes.count
+      )
+    }
+    .buttonStyle(.plain)
+    .contextMenu {
+      Button(role: .destructive) {
+        graphStore.remove(id: graph.id)
+      } label: {
+        Label("Delete", systemImage: "trash")
+      }
+    }
+  }
+
+  private func premiumUnlockState(for filter: FilterDefinition) -> Bool {
+    if filter.isPremium == false {
+      return true
+    }
+
+    // Затычка под будущую покупку:
+    // false = замок показывается
+    // true = замок скрыт
+    return true
   }
 
   private func filtersInSection(_ category: EffectCardCategory) -> [FilterDefinition] {

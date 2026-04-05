@@ -9,7 +9,7 @@ struct EffectCardView: View {
   let needsDepth: Bool
   let supportsIntensity: Bool
   let isPremium: Bool
-  let isLocked: Bool
+  let isUnlocked: Bool
   let category: EffectCardCategory?
   var nodeCount: Int? = nil
 
@@ -24,7 +24,6 @@ struct EffectCardView: View {
     .overlay(cardStroke)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    .drawingGroup(opaque: false)
   }
 
   private var cardBackground: some View {
@@ -141,7 +140,7 @@ struct EffectCardView: View {
         badge("PRO", systemImage: "crown.fill")
       }
 
-      if isLocked {
+      if isPremium && !isUnlocked {
         badge(nil, systemImage: "lock.fill")
       }
     }
@@ -197,7 +196,6 @@ struct EffectCardView: View {
     .clipShape(Capsule())
   }
 }
-
 #Preview("Compact 3-column cards") {
   ScrollView {
     LazyVGrid(
@@ -217,7 +215,7 @@ struct EffectCardView: View {
         needsDepth: false,
         supportsIntensity: true,
         isPremium: false,
-        isLocked: false,
+        isUnlocked: false,
         category: .outline
       )
 
@@ -230,7 +228,7 @@ struct EffectCardView: View {
         needsDepth: true,
         supportsIntensity: true,
         isPremium: false,
-        isLocked: false,
+        isUnlocked: false,
         category: .depth
       )
 
@@ -243,7 +241,7 @@ struct EffectCardView: View {
         needsDepth: false,
         supportsIntensity: true,
         isPremium: true,
-        isLocked: true,
+        isUnlocked: true,
         category: .pro
       )
 
@@ -256,7 +254,7 @@ struct EffectCardView: View {
         needsDepth: false,
         supportsIntensity: true,
         isPremium: false,
-        isLocked: false,
+        isUnlocked: false,
         category: .myEffects,
         nodeCount: 6
       )

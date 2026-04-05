@@ -9,10 +9,10 @@ enum EffectCardCategory: String, CaseIterable, Codable, Hashable {
 
   var title: String {
     switch self {
+    case .stylized: return "Stylized"
     case .pro: return "PRO"
     case .depth: return "LiDAR"
     case .outline: return "Outline"
-    case .stylized: return "Stylized"
     case .myEffects: return "My Effects"
     }
   }
