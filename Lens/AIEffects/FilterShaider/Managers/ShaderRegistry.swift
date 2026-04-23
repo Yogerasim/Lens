@@ -20,149 +20,7 @@ enum EffectCardCategory: String, CaseIterable, Codable, Hashable {
 
 enum ShaderRegistry {
   static let all: [ShaderDescriptor] = [
-
-    // MARK: - PRO
-
-    .init(
-      id: "kaleidoscope",
-      displayName: "Kaleidoscope Pro",
-      fragment: "fragment_kaleidoscope",
-      icon: "hexagon.grid.fill",
-      needsDepth: false,
-      supportsIntensity: true,
-      family: .nonDepth,
-      category: .pro,
-      isPremium: true
-    ),
-
-    .init(
-      id: "infraredBloom",
-      displayName: "Infrared Bloom",
-      fragment: "fragment_infraredbloom",
-      icon: "camera.aperture",
-      needsDepth: false,
-      supportsIntensity: true,
-      family: .nonDepth,
-      category: .pro,
-      isPremium: true
-    ),
-
-    .init(
-      id: "chromeGhost",
-      displayName: "Chrome Ghost",
-      fragment: "fragment_chromeghost",
-      icon: "sparkles.rectangle.stack.fill",
-      needsDepth: false,
-      supportsIntensity: true,
-      family: .nonDepth,
-      category: .pro,
-      isPremium: true
-    ),
-
-    .init(
-      id: "posterBurnUltra",
-      displayName: "Poster Burn Ultra",
-      fragment: "fragment_posterburnultra",
-      icon: "sparkles.tv.fill",
-      needsDepth: false,
-      supportsIntensity: true,
-      family: .nonDepth,
-      category: .pro,
-      isPremium: true
-    ),
-
-    .init(
-      id: "gyroidSerpentUltra",
-      displayName: "Gyroid Serpent Ultra",
-      fragment: "fragment_gyroidserpentultra",
-      icon: "wave.3.right.circle.fill",
-      needsDepth: false,
-      supportsIntensity: true,
-      family: .nonDepth,
-      category: .pro,
-      isPremium: true
-    ),
-
-    .init(
-      id: "shineTunnelOilSlick",
-      displayName: "Shine Tunnel Oil Slick",
-      fragment: "fragment_shinetunneloilslick",
-      icon: "sparkles.tv.fill",
-      needsDepth: false,
-      supportsIntensity: true,
-      family: .nonDepth,
-      category: .pro,
-      isPremium: true
-    ),
-
-    // MARK: - DEPTH / LiDAR
-
-    .init(
-      id: "depthSolidMono",
-      displayName: "Depth Solid Mono",
-      fragment: "fragment_depthsolidmono",
-      icon: "cube.fill",
-      needsDepth: true,
-      supportsIntensity: true,
-      family: .depth,
-      category: .depth
-    ),
-
-    .init(
-      id: "depthCAD",
-      displayName: "Depth CAD",
-      fragment: "fragment_depthcad",
-      icon: "square.3.layers.3d",
-      needsDepth: true,
-      supportsIntensity: true,
-      family: .depth,
-      category: .depth
-    ),
-
-    .init(
-      id: "depthSolidThermal",
-      displayName: "Depth Solid Thermal",
-      fragment: "fragment_depthsolidthermal",
-      icon: "flame.fill",
-      needsDepth: true,
-      supportsIntensity: true,
-      family: .depth,
-      category: .depth
-    ),
-
-    .init(
-      id: "depthSolid",
-      displayName: "Depth Solid",
-      fragment: "fragment_depthsolid",
-      icon: "cube.fill",
-      needsDepth: true,
-      supportsIntensity: true,
-      family: .depth,
-      category: .depth
-    ),
-
-    .init(
-      id: "depthOutline",
-      displayName: "Depth Outline",
-      fragment: "fragment_depthoutline",
-      icon: "cube.transparent",
-      needsDepth: true,
-      supportsIntensity: true,
-      family: .depth,
-      category: .depth
-    ),
-
-    .init(
-      id: "depthIridescent",
-      displayName: "Night Vision",
-      fragment: "fragment_depthiridescent",
-      icon: "sparkle.magnifyingglass",
-      needsDepth: true,
-      supportsIntensity: true,
-      family: .depth,
-      category: .depth
-    ),
-
+    
     // MARK: - OUTLINE
 
     .init(
@@ -295,6 +153,148 @@ enum ShaderRegistry {
       supportsIntensity: true,
       family: .nonDepth,
       category: .outline
+    ),
+
+    // MARK: - PRO
+
+    .init(
+      id: "kaleidoscope",
+      displayName: "Kaleidoscope Pro",
+      fragment: "fragment_kaleidoscope",
+      icon: "hexagon.grid.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth,
+      category: .pro,
+      isPremium: true
+    ),
+
+//    .init(
+//      id: "infraredBloom",
+//      displayName: "Infrared Bloom",
+//      fragment: "fragment_infraredbloom",
+//      icon: "camera.aperture",
+//      needsDepth: false,
+//      supportsIntensity: true,
+//      family: .nonDepth,
+//      category: .pro,
+//      isPremium: true
+//    ),
+
+    .init(
+      id: "chromeGhost",
+      displayName: "Chrome Ghost",
+      fragment: "fragment_chromeghost",
+      icon: "sparkles.rectangle.stack.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth,
+      category: .pro,
+      isPremium: true
+    ),
+
+    .init(
+      id: "posterBurnUltra",
+      displayName: "Poster Burn Ultra",
+      fragment: "fragment_posterburnultra",
+      icon: "sparkles.tv.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth,
+      category: .pro,
+      isPremium: true
+    ),
+
+    .init(
+      id: "gyroidSerpentUltra",
+      displayName: "Gyroid Serpent Ultra",
+      fragment: "fragment_gyroidserpentultra",
+      icon: "wave.3.right.circle.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth,
+      category: .pro,
+      isPremium: true
+    ),
+
+    .init(
+      id: "shineTunnelOilSlick",
+      displayName: "Shine Tunnel Oil Slick",
+      fragment: "fragment_shinetunneloilslick",
+      icon: "sparkles.tv.fill",
+      needsDepth: false,
+      supportsIntensity: true,
+      family: .nonDepth,
+      category: .pro,
+      isPremium: true
+    ),
+
+    // MARK: - DEPTH / LiDAR
+
+    .init(
+      id: "depthSolidMono",
+      displayName: "Depth Solid Mono",
+      fragment: "fragment_depthsolidmono",
+      icon: "cube.fill",
+      needsDepth: true,
+      supportsIntensity: true,
+      family: .depth,
+      category: .depth
+    ),
+
+    .init(
+      id: "depthCAD",
+      displayName: "Depth CAD",
+      fragment: "fragment_depthcad",
+      icon: "square.3.layers.3d",
+      needsDepth: true,
+      supportsIntensity: true,
+      family: .depth,
+      category: .depth
+    ),
+
+    .init(
+      id: "depthSolidThermal",
+      displayName: "Depth Solid Thermal",
+      fragment: "fragment_depthsolidthermal",
+      icon: "flame.fill",
+      needsDepth: true,
+      supportsIntensity: true,
+      family: .depth,
+      category: .depth
+    ),
+
+    .init(
+      id: "depthSolid",
+      displayName: "Depth Solid",
+      fragment: "fragment_depthsolid",
+      icon: "cube.fill",
+      needsDepth: true,
+      supportsIntensity: true,
+      family: .depth,
+      category: .depth
+    ),
+
+    .init(
+      id: "depthOutline",
+      displayName: "Depth Outline",
+      fragment: "fragment_depthoutline",
+      icon: "cube.transparent",
+      needsDepth: true,
+      supportsIntensity: true,
+      family: .depth,
+      category: .depth
+    ),
+
+    .init(
+      id: "depthIridescent",
+      displayName: "Night Vision",
+      fragment: "fragment_depthiridescent",
+      icon: "sparkle.magnifyingglass",
+      needsDepth: true,
+      supportsIntensity: true,
+      family: .depth,
+      category: .depth
     ),
 
     // MARK: - STYLIZED
