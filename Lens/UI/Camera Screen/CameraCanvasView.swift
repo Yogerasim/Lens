@@ -47,7 +47,9 @@ struct CameraCanvasView: View {
                         isVisible: isIntensityHUDVisible
                     )
                     .padding(.trailing, 16)
+                    .allowsHitTesting(false)
                 }
+                .allowsHitTesting(false)
             }
         }
     }
